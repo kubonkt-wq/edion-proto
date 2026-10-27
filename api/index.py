@@ -1,8 +1,9 @@
 import io
+import os
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 import pandas as pd
 from reportlab.lib.pagesizes import A4
@@ -14,6 +15,16 @@ app = FastAPI()
 
 # 日本語フォント登録（標準の平成明朝）
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
+
+# ルート（/）にアクセスされたら index.html の中身をブラウザに返す
+@app.get("/", response_class=HTMLResponse)
+async def serve_home():
+    html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
+    if not os.path.exists(html_path):
+        # 万一ルート直下に見当たらない場合のフォールバック
+        html_path = "index.html"
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
 
 class OrderItem(BaseModel):
     order_id: str
@@ -76,7 +87,7 @@ async def export_pdf(payload: ExportPayload):
     p.drawString(480, 750, "金額（税込）")
     p.line(50, 740, 550, 740)
     
-    # 注文明細の出力
+    # 注文明細
     y = 720
     total = 0
     for item in payload.orders:
