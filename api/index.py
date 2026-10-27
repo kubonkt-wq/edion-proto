@@ -14,23 +14,22 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 app = FastAPI()
-
-# 日本語フォント登録
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
 def get_stores_data():
-    """SHOPS.CSV を直接読み込んで画面に渡す"""
+    base_dir = os.path.dirname(__file__)
+    root_dir = os.path.join(base_dir, "..")
+    
+    # 小文字の stores.csv を最優先で探す
     csv_paths = [
-        "SHOPS.CSV", 
-        "shops.csv",
-        os.path.join(os.path.dirname(__file__), "..", "SHOPS.CSV"),
-        os.path.join(os.path.dirname(__file__), "..", "shops.csv")
+        os.path.join(root_dir, "stores.csv"),
+        os.path.join(root_dir, "STORES.CSV"),
+        os.path.join(root_dir, "SHOPS.CSV"),
+        os.path.join(root_dir, "shops.csv")
     ]
     
-    # 1. まずCSVを探して直接読み込む
     for p in csv_paths:
         if os.path.exists(p):
-            # 文字コードエラー対策（utf-8-sig -> shift_jis）
             try:
                 with open(p, "r", encoding="utf-8-sig") as f:
                     reader = csv.DictReader(f)
@@ -39,20 +38,8 @@ def get_stores_data():
                 with open(p, "r", encoding="shift_jis") as f:
                     reader = csv.DictReader(f)
                     return list(reader)
-
-    # 2. CSVがなければ従来の stores.json を探す
-    json_paths = [
-        "stores.json",
-        os.path.join(os.path.dirname(__file__), "..", "stores.json")
-    ]
-    for p in json_paths:
-        if os.path.exists(p):
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-                
     return []
 
-# トップページ
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
     html_path = "index.html"
@@ -61,10 +48,7 @@ async def serve_home():
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
-# Web画面からの通信リクエスト用
-@app.get("/stores.json")
 @app.get("/api/stores")
-@app.get("/stores")
 async def get_stores():
     return JSONResponse(content=get_stores_data())
 
@@ -81,7 +65,6 @@ class ExportPayload(BaseModel):
     orders: List[OrderItem]
 
 @app.post("/api/export-excel")
-@app.post("/export-excel")
 async def export_excel(payload: ExportPayload):
     data = [item.dict() for item in payload.orders]
     df = pd.DataFrame(data)
@@ -102,7 +85,6 @@ async def export_excel(payload: ExportPayload):
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="月次請求対象一覧")
     output.seek(0)
-
     filename = f"chunichi_billing_{datetime.now().strftime('%Y%m%d')}.xlsx"
     return StreamingResponse(
         output,
@@ -111,18 +93,15 @@ async def export_excel(payload: ExportPayload):
     )
 
 @app.post("/api/export-pdf")
-@app.post("/export-pdf")
 async def export_pdf(payload: ExportPayload):
     output = io.BytesIO()
     p = canvas.Canvas(output, pagesize=A4)
     p.setFont("HeiseiMin-W3", 16)
-    
     p.drawString(50, 800, "発注書（EDION 御中）")
     p.setFont("HeiseiMin-W3", 10)
     p.drawString(400, 800, f"発行日: {datetime.now().strftime('%Y年%m月%d日')}")
     p.drawString(400, 785, "発注元: 株式会社中日新聞社")
     p.line(50, 770, 550, 770)
-    
     p.drawString(50, 750, "発注番号")
     p.drawString(130, 750, "販売店（配送先識別）")
     p.drawString(280, 750, "発注商品名")
@@ -144,11 +123,9 @@ async def export_pdf(payload: ExportPayload):
             
     p.line(50, y + 10, 550, y + 10)
     p.drawString(380, y - 10, f"合計発注金額: ¥{total:,}")
-    
     p.showPage()
     p.save()
     output.seek(0)
-
     filename = f"edion_purchase_order_{datetime.now().strftime('%Y%m%d')}.pdf"
     return StreamingResponse(
         output,

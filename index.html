@@ -38,7 +38,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">CSVファイルを直接読み込み中...</div>
+      <div id="status_info" class="status-badge status-info">サーバーと通信中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -178,60 +178,39 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // バックエンドを経由せず、ブラウザで直接CSVファイルをダウンロードして分割する
+    // API (/api/stores) 経由でデータを取得
     async function loadStores() {
-      let loaded = false;
-      let errLogs = [];
-      // 両方のファイル名に対応
-      const targets = ['/SHOPS.CSV', '/stores.csv'];
-
-      for (const url of targets) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            const text = await res.text();
-            const lines = text.trim().split(/\r?\n/);
+      try {
+        const res = await fetch('/api/stores');
+        if (res.ok) {
+          const raw = await res.json();
+          if (Array.isArray(raw) && raw.length > 0) {
+            ALL_STORES = raw.map((item, idx) => ({
+              _uid: "store_" + idx,
+              pref: String(item.pref || item["県"] || "").trim(),
+              district: String(item.district || item["地区"] || "").trim(),
+              branch: String(item.branch || item["支部"] || "").trim(),
+              group_name: String(item.group_name || item["班"] || "").trim(),
+              name: String(item.name || item["店舗名"] || "").trim(),
+              id: String(item.id || item["コード"] || "").trim()
+            }));
             
-            if (lines.length > 1) {
-              ALL_STORES = [];
-              // 1行目（ヘッダー）を飛ばして2行目から読み込み
-              for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split(',');
-                if (cols.length >= 6) {
-                  ALL_STORES.push({
-                    _uid: "store_" + i,
-                    pref: cols[0].trim(),
-                    district: cols[1].trim(),
-                    branch: cols[2].trim(),
-                    group_name: cols[3].trim(),
-                    name: cols[4].trim(),
-                    id: cols[5].trim()
-                  });
-                }
-              }
-              
-              statusInfo.className = "status-badge status-success";
-              statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを ${url} から直接読み込みました`;
-              initSelects();
-              loaded = true;
-              break;
-            }
-          } else {
-            errLogs.push(`${url}: HTTP ${res.status}`);
+            statusInfo.className = "status-badge status-success";
+            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データをサーバーから読み込みました`;
+            initSelects();
+            return;
           }
-        } catch (e) {
-          errLogs.push(`${url}: ${e.message}`);
         }
+      } catch (e) {
+         console.error(e);
       }
       
-      if (!loaded) {
-        statusInfo.className = "status-badge status-error";
-        statusInfo.textContent = `⚠ 読み込み失敗 (${errLogs.join(' | ')}). CSVファイルが見つかりません。`;
-      }
+      statusInfo.className = "status-badge status-error";
+      statusInfo.textContent = `⚠ 読み込み失敗: stores.csv がサーバー上で見つかりません。`;
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v14");
+      const data = localStorage.getItem("demo_orders_v15");
       return data ? JSON.parse(data) : [];
     }
 
@@ -263,7 +242,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v14", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v15", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -276,7 +255,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v14", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v15", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
