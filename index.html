@@ -178,13 +178,15 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // 存在する可能性のあるファイル名をすべてアタックし、結果を画面に出す
     async function loadStores() {
       let loaded = false;
       let errLogs = [];
-      const targets = ['/stores.csv', '/SHOPS.CSV', '/shops.csv', '/STORES.CSV'];
+      // ブラウザのキャッシュを強制的に破棄する魔法のパラメータ
+      const cacheBuster = "?t=" + new Date().getTime();
+      const targets = ['stores.csv', 'SHOPS.CSV', 'shops.csv', 'STORES.CSV'];
 
-      for (const url of targets) {
+      for (const base of targets) {
+        const url = base + cacheBuster;
         try {
           const res = await fetch(url);
           if (res.ok) {
@@ -209,27 +211,27 @@
               }
               
               statusInfo.className = "status-badge status-success";
-              statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを「${url}」から直接読み込みました！`;
+              statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを「${base}」から直接読み込みました！`;
               initSelects();
               loaded = true;
               break;
             }
           } else {
-            errLogs.push(`[${url}: HTTP ${res.status}]`);
+            errLogs.push(`[${base}: HTTP ${res.status}]`);
           }
         } catch (e) {
-          errLogs.push(`[${url}: ${e.message}]`);
+          errLogs.push(`[${base}: ${e.message}]`);
         }
       }
       
       if (!loaded) {
         statusInfo.className = "status-badge status-error";
-        statusInfo.innerHTML = `⚠ 読み込み失敗。以下の全パターンを試しましたがファイルがありません。<br>${errLogs.join(' / ')}`;
+        statusInfo.innerHTML = `⚠ 読み込み失敗。Vercelサーバー上にCSVがアップロードされていません。<br>${errLogs.join(' / ')}`;
       }
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v17");
+      const data = localStorage.getItem("demo_orders_v18");
       return data ? JSON.parse(data) : [];
     }
 
@@ -261,7 +263,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v17", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v18", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -274,7 +276,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v17", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v18", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
