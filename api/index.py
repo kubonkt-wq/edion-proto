@@ -1,6 +1,7 @@
 import io
 import os
 import json
+import csv
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI
@@ -18,16 +19,37 @@ app = FastAPI()
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
 def get_stores_data():
-    """stores.json を確実に読み込む"""
-    candidates = [
-        "stores.json",
-        os.path.join(os.path.dirname(__file__), "..", "stores.json"),
-        os.path.join(os.path.dirname(__file__), "stores.json")
+    """SHOPS.CSV を直接読み込んで画面に渡す"""
+    csv_paths = [
+        "SHOPS.CSV", 
+        "shops.csv",
+        os.path.join(os.path.dirname(__file__), "..", "SHOPS.CSV"),
+        os.path.join(os.path.dirname(__file__), "..", "shops.csv")
     ]
-    for p in candidates:
+    
+    # 1. まずCSVを探して直接読み込む
+    for p in csv_paths:
+        if os.path.exists(p):
+            # 文字コードエラー対策（utf-8-sig -> shift_jis）
+            try:
+                with open(p, "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f)
+                    return list(reader)
+            except UnicodeDecodeError:
+                with open(p, "r", encoding="shift_jis") as f:
+                    reader = csv.DictReader(f)
+                    return list(reader)
+
+    # 2. CSVがなければ従来の stores.json を探す
+    json_paths = [
+        "stores.json",
+        os.path.join(os.path.dirname(__file__), "..", "stores.json")
+    ]
+    for p in json_paths:
         if os.path.exists(p):
             with open(p, "r", encoding="utf-8") as f:
                 return json.load(f)
+                
     return []
 
 # トップページ
@@ -39,7 +61,7 @@ async def serve_home():
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
-# どのURLからリクエストが来ても店舗データを返す
+# Web画面からの通信リクエスト用
 @app.get("/stores.json")
 @app.get("/api/stores")
 @app.get("/stores")
