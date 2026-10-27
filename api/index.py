@@ -28,7 +28,9 @@ async def serve_home():
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
+# Vercel内部ルーティング（/stores）と直接アクセス（/api/stores）の両方を受信
 @app.get("/api/stores")
+@app.get("/stores")
 async def get_stores():
     json_path = os.path.join(BASE_DIR, "stores.json")
     if not os.path.exists(json_path):
@@ -51,6 +53,7 @@ class ExportPayload(BaseModel):
     orders: List[OrderItem]
 
 @app.post("/api/export-excel")
+@app.post("/export-excel")
 async def export_excel(payload: ExportPayload):
     data = [item.dict() for item in payload.orders]
     df = pd.DataFrame(data)
@@ -80,6 +83,7 @@ async def export_excel(payload: ExportPayload):
     )
 
 @app.post("/api/export-pdf")
+@app.post("/export-pdf")
 async def export_pdf(payload: ExportPayload):
     output = io.BytesIO()
     p = canvas.Canvas(output, pagesize=A4)
