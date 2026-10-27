@@ -8,9 +8,10 @@
     .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
     .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
     h2 { font-size: 16px; margin-top: 0; border-bottom: 2px solid #005bac; padding-bottom: 8px; color: #005bac; }
-    label { display: block; font-size: 13px; font-weight: bold; margin-top: 12px; }
-    select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
-    .store-detail-box { font-size: 12px; line-height: 1.6; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-top: 10px; }
+    label { display: block; font-size: 12px; font-weight: bold; margin-top: 10px; color: #444; }
+    select, input { width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+    select:disabled { background: #f1f3f5; cursor: not-allowed; }
+    .store-detail-box { font-size: 12px; line-height: 1.6; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-top: 12px; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -34,37 +35,39 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       <form id="orderForm">
-        <label>販売店を選択</label>
-        <select id="store_select" required>
-          <option value="">販売店を選択してください</option>
-          <optgroup label="【愛知県】">
-            <option value="0">[1001] 中日新聞 栄専売店 (名古屋支社)</option>
-            <option value="1">[1002] 中日新聞 名駅専売店 (名古屋支社)</option>
-            <option value="2">[1003] 中日新聞 豊橋中央店 (三河支社)</option>
-            <option value="3">[1004] 中日新聞 岡崎専売所 (三河支社)</option>
-            <option value="4">[1005] 中日新聞 一宮専売店 (一宮支社)</option>
-          </optgroup>
-          <optgroup label="【岐阜県】">
-            <option value="5">[2001] 中日新聞 岐阜本町専売店 (岐阜支社)</option>
-            <option value="6">[2002] 中日新聞 大垣中央店 (大垣支社)</option>
-            <option value="7">[2003] 中日新聞 多治見駅前店 (東濃総局)</option>
-          </optgroup>
-          <optgroup label="【三重県】">
-            <option value="8">[3001] 中日新聞 津中央専売店 (三重総局)</option>
-            <option value="9">[3002] 中日新聞 四日市専売所 (北勢支社)</option>
-            <option value="10">[3003] 中日新聞 伊勢専売店 (南勢総局)</option>
-          </optgroup>
-          <optgroup label="【静岡県】">
-            <option value="11">[4001] 中日新聞 浜松中央専売店 (東海総局)</option>
-          </optgroup>
+        <!-- 5段階絞り込みセレクトボックス -->
+        <label>① 県を選択</label>
+        <select id="sel_pref" required>
+          <option value="">県を選択してください</option>
         </select>
 
+        <label>② 地区を選択</label>
+        <select id="sel_district" disabled required>
+          <option value="">まず県を選択してください</option>
+        </select>
+
+        <label>③ 支部（支社）を選択</label>
+        <select id="sel_branch" disabled required>
+          <option value="">まず地区を選択してください</option>
+        </select>
+
+        <label>④ 班（グループ）を選択</label>
+        <select id="sel_group" disabled required>
+          <option value="">まず支部を選択してください</option>
+        </select>
+
+        <label>⑤ 販売店を選択</label>
+        <select id="sel_store" disabled required>
+          <option value="">まず班を選択してください</option>
+        </select>
+
+        <!-- 決定した店舗の詳細情報ボックス -->
         <div id="store_meta" class="store-detail-box" style="display: none;">
-          <strong>店コード:</strong> <span id="meta_id">-</span> | <strong>管轄支社:</strong> <span id="meta_branch">-</span><br>
-          <strong>地域区分:</strong> <span id="meta_pref">-</span> <span id="meta_district">-</span> (<span id="meta_group">-</span>)
+          <strong>店コード:</strong> <span id="meta_id">-</span> | <strong>店名:</strong> <span id="meta_name">-</span><br>
+          <strong>所属:</strong> <span id="meta_pref">-</span> / <span id="meta_district">-</span> / <span id="meta_branch">-</span> / <span id="meta_group">-</span>
         </div>
 
-        <label>商品名・型番</label>
+        <label style="margin-top: 14px;">商品名・型番</label>
         <input type="text" id="product_name" placeholder="例: 日立 エアコン 白くまくん" required>
 
         <label>販売金額 (円)</label>
@@ -87,7 +90,7 @@
           <tr>
             <th>発注番号</th>
             <th>日時</th>
-            <th>店ID / 支社</th>
+            <th>店ID / 支部</th>
             <th>販売店名</th>
             <th>商品名</th>
             <th>金額</th>
@@ -99,38 +102,191 @@
   </div>
 
   <script>
-    const STORE_LIST = [
-      { id: "1001", name: "中日新聞 栄専売店", branch: "名古屋支社", pref: "愛知県", district: "名古屋市中区", group_name: "中区会" },
-      { id: "1002", name: "中日新聞 名駅専売店", branch: "名古屋支社", pref: "愛知県", district: "名古屋市中村区", group_name: "名駅会" },
-      { id: "1003", name: "中日新聞 豊橋中央店", branch: "三河支社", pref: "愛知県", district: "豊橋市", group_name: "豊橋東会" },
-      { id: "1004", name: "中日新聞 岡崎専売所", branch: "三河支社", pref: "愛知県", district: "岡崎市", group_name: "岡崎中央会" },
-      { id: "1005", name: "中日新聞 一宮専売店", branch: "一宮支社", pref: "愛知県", district: "一宮市", group_name: "尾張会" },
-      { id: "2001", name: "中日新聞 岐阜本町専売店", branch: "岐阜支社", pref: "岐阜県", district: "岐阜市", group_name: "岐阜中央会" },
-      { id: "2002", name: "中日新聞 大垣中央店", branch: "大垣支社", pref: "岐阜県", district: "大垣市", group_name: "西濃会" },
-      { id: "2003", name: "中日新聞 多治見駅前店", branch: "東濃総局", pref: "岐阜県", district: "多治見市", group_name: "東濃会" },
-      { id: "3001", name: "中日新聞 津中央専売店", branch: "三重総局", pref: "三重県", district: "津市", group_name: "津会" },
-      { id: "3002", name: "中日新聞 四日市専売所", branch: "北勢支社", pref: "三重県", district: "四日市市", group_name: "四日市会" },
-      { id: "3003", name: "中日新聞 伊勢専売店", branch: "南勢総局", pref: "三重県", district: "伊勢市", group_name: "南勢会" },
-      { id: "4001", name: "中日新聞 浜松中央専売店", branch: "東海総局", pref: "静岡県", district: "浜松市中央区", group_name: "遠州会" }
+    // デモ用のマスターデータ（県・地区・支部・班・店舗）
+    let ALL_STORES = [
+      { id: "1001", pref: "愛知県", district: "名古屋市中区", branch: "名古屋支社", group_name: "中区東班", name: "中日新聞 栄専売店" },
+      { id: "1002", pref: "愛知県", district: "名古屋市中区", branch: "名古屋支社", group_name: "中区西班", name: "中日新聞 白川専売所" },
+      { id: "1003", pref: "愛知県", district: "名古屋市中村区", branch: "名古屋支社", group_name: "名駅中央班", name: "中日新聞 名駅専売店" },
+      { id: "1004", pref: "愛知県", district: "豊橋市", branch: "三河支社", group_name: "豊橋東班", name: "中日新聞 豊橋中央店" },
+      { id: "1005", pref: "愛知県", district: "岡崎市", branch: "三河支社", group_name: "岡崎中央班", name: "中日新聞 岡崎専売所" },
+      { id: "1006", pref: "愛知県", district: "一宮市", branch: "一宮支社", group_name: "尾張北班", name: "中日新聞 一宮専売店" },
+      { id: "2001", pref: "岐阜県", district: "岐阜市", branch: "岐阜支社", group_name: "岐阜中央班", name: "中日新聞 岐阜本町専売店" },
+      { id: "2002", pref: "岐阜県", district: "大垣市", branch: "大垣支社", group_name: "西濃中央班", name: "中日新聞 大垣中央店" },
+      { id: "2003", pref: "岐阜県", district: "多治見市", branch: "東濃総局", group_name: "東濃南班", name: "中日新聞 多治見駅前店" },
+      { id: "3001", pref: "三重県", district: "津市", branch: "三重総局", group_name: "津中央班", name: "中日新聞 津中央専売店" },
+      { id: "3002", pref: "三重県", district: "四日市市", branch: "北勢支社", group_name: "四日市北班", name: "中日新聞 四日市専売所" },
+      { id: "3003", pref: "三重県", district: "伊勢市", branch: "南勢総局", group_name: "伊勢神宮前班", name: "中日新聞 伊勢専売店" },
+      { id: "4001", pref: "静岡県", district: "浜松市中央区", branch: "東海総局", group_name: "浜松駅前班", name: "中日新聞 浜松中央専売店" }
     ];
 
-    document.getElementById('store_select').addEventListener('change', function(e) {
-      const val = e.target.value;
-      const metaBox = document.getElementById('store_meta');
-      if (val !== "") {
-        const store = STORE_LIST[parseInt(val, 10)];
-        if (store) {
-          document.getElementById('meta_id').textContent = store.id;
-          document.getElementById('meta_branch').textContent = store.branch;
-          document.getElementById('meta_pref').textContent = store.pref;
-          document.getElementById('meta_district').textContent = store.district;
-          document.getElementById('meta_group').textContent = store.group_name;
-          metaBox.style.display = 'block';
-          return;
-        }
+    let SELECTED_STORE = null;
+
+    const elPref = document.getElementById('sel_pref');
+    const elDistrict = document.getElementById('sel_district');
+    const elBranch = document.getElementById('sel_branch');
+    const elGroup = document.getElementById('sel_group');
+    const elStore = document.getElementById('sel_store');
+    const metaBox = document.getElementById('store_meta');
+
+    // ① 県の初期化
+    function initPrefectures() {
+      const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))];
+      elPref.innerHTML = '<option value="">県を選択してください</option>';
+      prefs.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        elPref.appendChild(opt);
+      });
+    }
+
+    // ① 県選択時 → ② 地区を絞り込み
+    elPref.addEventListener('change', () => {
+      const p = elPref.value;
+      resetSelect(elDistrict, "地区を選択してください");
+      resetSelect(elBranch, "まず地区を選択してください", true);
+      resetSelect(elGroup, "まず支部を選択してください", true);
+      resetSelect(elStore, "まず班を選択してください", true);
+      clearMeta();
+
+      if (!p) {
+        elDistrict.disabled = true;
+        return;
       }
-      metaBox.style.display = 'none';
+
+      const districts = [...new Set(ALL_STORES.filter(s => s.pref === p).map(s => s.district).filter(Boolean))];
+      districts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        elDistrict.appendChild(opt);
+      });
+      elDistrict.disabled = false;
     });
+
+    // ② 地区選択時 → ③ 支部（支社）を絞り込み
+    elDistrict.addEventListener('change', () => {
+      const p = elPref.value;
+      const d = elDistrict.value;
+      resetSelect(elBranch, "支部を選択してください");
+      resetSelect(elGroup, "まず支部を選択してください", true);
+      resetSelect(elStore, "まず班を選択してください", true);
+      clearMeta();
+
+      if (!d) {
+        elBranch.disabled = true;
+        return;
+      }
+
+      const branches = [...new Set(ALL_STORES.filter(s => s.pref === p && s.district === d).map(s => s.branch).filter(Boolean))];
+      branches.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b;
+        opt.textContent = b;
+        elBranch.appendChild(opt);
+      });
+      elBranch.disabled = false;
+    });
+
+    // ③ 支部選択時 → ④ 班（グループ）を絞り込み
+    elBranch.addEventListener('change', () => {
+      const p = elPref.value;
+      const d = elDistrict.value;
+      const b = elBranch.value;
+      resetSelect(elGroup, "班を選択してください");
+      resetSelect(elStore, "まず班を選択してください", true);
+      clearMeta();
+
+      if (!b) {
+        elGroup.disabled = true;
+        return;
+      }
+
+      const groups = [...new Set(ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b).map(s => s.group_name).filter(Boolean))];
+      groups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        elGroup.appendChild(opt);
+      });
+      elGroup.disabled = false;
+    });
+
+    // ④ 班選択時 → ⑤ 店舗を絞り込み
+    elGroup.addEventListener('change', () => {
+      const p = elPref.value;
+      const d = elDistrict.value;
+      const b = elBranch.value;
+      const g = elGroup.value;
+      resetSelect(elStore, "販売店を選択してください");
+      clearMeta();
+
+      if (!g) {
+        elStore.disabled = true;
+        return;
+      }
+
+      const stores = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b && s.group_name === g);
+      stores.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `[${s.id}] ${s.name}`;
+        elStore.appendChild(opt);
+      });
+      elStore.disabled = false;
+    });
+
+    // ⑤ 店舗選択時 → 詳細情報の表示
+    elStore.addEventListener('change', () => {
+      const id = elStore.value;
+      if (!id) {
+        clearMeta();
+        return;
+      }
+      SELECTED_STORE = ALL_STORES.find(s => s.id === id);
+      if (SELECTED_STORE) {
+        document.getElementById('meta_id').textContent = SELECTED_STORE.id;
+        document.getElementById('meta_name').textContent = SELECTED_STORE.name;
+        document.getElementById('meta_pref').textContent = SELECTED_STORE.pref;
+        document.getElementById('meta_district').textContent = SELECTED_STORE.district;
+        document.getElementById('meta_branch').textContent = SELECTED_STORE.branch;
+        document.getElementById('meta_group').textContent = SELECTED_STORE.group_name;
+        metaBox.style.display = 'block';
+      }
+    });
+
+    function resetSelect(el, placeholder, disabled = false) {
+      el.innerHTML = `<option value="">${placeholder}</option>`;
+      el.disabled = disabled;
+    }
+
+    function clearMeta() {
+      SELECTED_STORE = null;
+      metaBox.style.display = 'none';
+    }
+
+    // 外部 stores.json が存在する場合は取り込んで自動マージ
+    async function tryLoadExternalStores() {
+      try {
+        const res = await fetch('/stores.json');
+        if (res.ok) {
+          const ext = await res.json();
+          if (Array.isArray(ext) && ext.length > 0) {
+            ALL_STORES = ext.map((item, idx) => ({
+              id: String(item.id || item["販売店ID"] || item["店コード"] || 1000 + idx),
+              name: String(item.name || item["販売店名"] || item["店名"] || `専売店${idx}`),
+              pref: String(item.pref || item["県"] || item["都道府県"] || "愛知県"),
+              district: String(item.district || item["地区"] || item["市区町村"] || "名古屋市"),
+              branch: String(item.branch || item["支社"] || item["支部"] || item["管轄支社"] || "名古屋支社"),
+              group_name: String(item.group_name || item["班"] || item["グループ"] || "中央班")
+            }));
+          }
+        }
+      } catch (e) {
+        // 外部読み込み失敗時は内蔵マスターで動作
+      }
+      initPrefectures();
+    }
 
     const INITIAL_DATA = [
       { order_id: "ORD-1001", order_date: "2026-10-25 10:15", store_id: "1001", branch: "名古屋支社", store_name: "中日新聞 栄専売店", product_name: "パナソニック 4K液晶テレビ 55型", price: 148000 },
@@ -138,7 +294,7 @@
     ];
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v3");
+      const data = localStorage.getItem("demo_orders_v4");
       return data ? JSON.parse(data) : INITIAL_DATA;
     }
 
@@ -148,4 +304,61 @@
       tbody.innerHTML = orders.map(o => `
         <tr>
           <td><span class="badge">${o.order_id}</span></td>
-          <td>${o.order_date.
+          <td>${o.order_date.slice(5, 16)}</td>
+          <td>${o.store_id} <br><span style="font-size:10px; color:#666;">${o.branch}</span></td>
+          <td>${o.store_name}</td>
+          <td>${o.product_name}</td>
+          <td>¥${Number(o.price).toLocaleString()}</td>
+        </tr>
+      `).join("");
+    }
+
+    document.getElementById("orderForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      if (!SELECTED_STORE) {
+        alert("⑤ 販売店まで選択してください");
+        return;
+      }
+
+      const orders = getOrders();
+      const newOrder = {
+        order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
+        order_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        store_id: SELECTED_STORE.id,
+        branch: SELECTED_STORE.branch,
+        store_name: SELECTED_STORE.name,
+        product_name: document.getElementById("product_name").value,
+        price: parseInt(document.getElementById("price").value, 10)
+      };
+      orders.unshift(newOrder);
+      localStorage.setItem("demo_orders_v4", JSON.stringify(orders));
+      renderTable();
+      document.getElementById("product_name").value = "";
+      document.getElementById("price").value = "";
+    });
+
+    async function exportData(url) {
+      const orders = getOrders();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders })
+      });
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf";
+      a.click();
+    }
+
+    function resetDemo() {
+      localStorage.setItem("demo_orders_v4", JSON.stringify(INITIAL_DATA));
+      renderTable();
+    }
+
+    tryLoadExternalStores();
+    renderTable();
+  </script>
+</body>
+</html>
