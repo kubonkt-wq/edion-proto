@@ -1,202 +1,127 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>【デモ版】中日新聞社 × EDION 代理店発注プラットフォーム</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 24px; color: #333; }
-    .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
-    .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-    h2 { font-size: 16px; margin-top: 0; border-bottom: 2px solid #005bac; padding-bottom: 8px; color: #005bac; }
-    label { display: block; font-size: 13px; font-weight: bold; margin-top: 12px; }
-    select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-    .store-detail-box { font-size: 11px; color: #555; background: #eef4fa; padding: 8px; border-radius: 4px; margin-top: 6px; }
-    button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
-    button:hover { background: #004582; }
-    .btn-secondary { background: #28a745; margin-top: 0; }
-    .btn-secondary:hover { background: #218838; }
-    .btn-pdf { background: #d9534f; margin-top: 0; }
-    .btn-pdf:hover { background: #c9302c; }
-    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f0f4f8; }
-    .badge { display: inline-block; padding: 2px 6px; font-size: 10px; border-radius: 3px; background: #e2e3e5; color: #383d41; }
-  </style>
-</head>
-<body>
-  <div style="max-width: 1100px; margin: 0 auto 16px;">
-    <h1 style="font-size: 20px; margin: 0;">中日新聞社・EDION 代理店連携 注文管理プロトタイプ</h1>
-    <p style="font-size: 13px; color: #666; margin: 4px 0 0;">販売店受付からEDIONへの発注・新聞社月次請求連携の一括検証モックアップ</p>
-  </div>
+import io
+import os
+import json
+from datetime import datetime
+from typing import List
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
+import pandas as pd
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
-  <div class="container">
-    <div class="card">
-      <h2>1. 販売店 注文受付入力</h2>
-      <form id="orderForm">
-        <label>販売店を選択</label>
-        <select id="store_select" required>
-          <option value="">読み込み中...</option>
-        </select>
+app = FastAPI()
 
-        <div id="store_meta" class="store-detail-box" style="display: none;">
-          店ID: <span id="meta_id">-</span> | 支社: <span id="meta_branch">-</span><br>
-          地域: <span id="meta_pref">-</span> <span id="meta_district">-</span> (<span id="meta_group">-</span>)
-        </div>
+# 日本語フォント登録
+pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
-        <label>商品名・型番</label>
-        <input type="text" id="product_name" placeholder="例: 日立 エアコン 白くまくん" required>
+# トップページ (index.html) の配信
+@app.get("/", response_class=HTMLResponse)
+async def serve_home():
+    html_path = "index.html"
+    if not os.path.exists(html_path):
+        html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
 
-        <label>販売金額 (円)</label>
-        <input type="number" id="price" placeholder="例: 128000" required>
+# 販売店リストAPI（ルート直下の stores.json を直接読み込み）
+@app.get("/api/stores")
+@app.get("/stores")
+async def get_stores():
+    json_path = "stores.json"
+    if not os.path.exists(json_path):
+        json_path = os.path.join(os.path.dirname(__file__), "..", "stores.json")
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
 
-        <button type="submit">新聞社へ注文送信</button>
-      </form>
-    </div>
+class OrderItem(BaseModel):
+    order_id: str
+    order_date: str
+    store_id: str = ""
+    store_name: str
+    branch: str = ""
+    product_name: str
+    price: int
 
-    <div class="card">
-      <h2>2. 新聞社 注文集約・連携センター</h2>
-      <div class="toolbar">
-        <button class="btn-secondary" onclick="exportData('/api/export-excel')">月次請求用 Excel 出力</button>
-        <button class="btn-pdf" onclick="exportData('/api/export-pdf')">EDION宛て 発注書PDF 出力</button>
-        <button style="background: #6c757d; width: auto;" onclick="resetDemo()">初期化</button>
-      </div>
+class ExportPayload(BaseModel):
+    orders: List[OrderItem]
 
-      <table id="orderTable">
-        <thead>
-          <tr>
-            <th>発注番号</th>
-            <th>日時</th>
-            <th>店ID / 支社</th>
-            <th>販売店名</th>
-            <th>商品名</th>
-            <th>金額</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </div>
-  </div>
+@app.post("/api/export-excel")
+@app.post("/export-excel")
+async def export_excel(payload: ExportPayload):
+    data = [item.dict() for item in payload.orders]
+    df = pd.DataFrame(data)
+    if df.empty:
+        df = pd.DataFrame(columns=["order_id", "order_date", "store_id", "branch", "store_name", "product_name", "price"])
+    
+    df.rename(columns={
+        "order_id": "発注番号",
+        "order_date": "発注日時",
+        "store_id": "販売店ID",
+        "branch": "管轄支社",
+        "store_name": "販売店名",
+        "product_name": "商品名・型番",
+        "price": "金額(円)"
+    }, inplace=True)
 
-  <script>
-    let STORE_DATA = [];
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="月次請求対象一覧")
+    output.seek(0)
 
-    // stores.json から直接販売店データを読み込む
-    async function loadStores() {
-      try {
-        const res = await fetch('/stores.json');
-        STORE_DATA = await res.json();
-        const select = document.getElementById('store_select');
-        select.innerHTML = '<option value="">販売店を選択してください</option>';
+    filename = f"chunichi_billing_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
-        const grouped = {};
-        STORE_DATA.forEach(s => {
-          const pref = s.pref || "その他";
-          if (!grouped[pref]) grouped[pref] = [];
-          grouped[pref].push(s);
-        });
+@app.post("/api/export-pdf")
+@app.post("/export-pdf")
+async def export_pdf(payload: ExportPayload):
+    output = io.BytesIO()
+    p = canvas.Canvas(output, pagesize=A4)
+    p.setFont("HeiseiMin-W3", 16)
+    
+    p.drawString(50, 800, "発注書（EDION 御中）")
+    p.setFont("HeiseiMin-W3", 10)
+    p.drawString(400, 800, f"発行日: {datetime.now().strftime('%Y年%m月%d日')}")
+    p.drawString(400, 785, "発注元: 株式会社中日新聞社")
+    p.line(50, 770, 550, 770)
+    
+    p.drawString(50, 750, "発注番号")
+    p.drawString(130, 750, "販売店（配送先識別）")
+    p.drawString(280, 750, "発注商品名")
+    p.drawString(480, 750, "金額（税込）")
+    p.line(50, 740, 550, 740)
+    
+    y = 720
+    total = 0
+    for item in payload.orders:
+        p.drawString(50, y, item.order_id)
+        display_store = f"[{item.store_id}] {item.store_name}" if item.store_id else item.store_name
+        p.drawString(130, y, display_store[:12])
+        p.drawString(280, y, item.product_name[:16])
+        p.drawString(480, y, f"¥{item.price:,}")
+        total += item.price
+        y -= 25
+        if y < 100:
+            break
+            
+    p.line(50, y + 10, 550, y + 10)
+    p.drawString(380, y - 10, f"合計発注金額: ¥{total:,}")
+    
+    p.showPage()
+    p.save()
+    output.seek(0)
 
-        for (const pref in grouped) {
-          const optgroup = document.createElement('optgroup');
-          optgroup.label = `【${pref}】`;
-          grouped[pref].forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = `[${s.id}] ${s.name} (${s.branch || ''})`;
-            optgroup.appendChild(opt);
-          });
-          select.appendChild(optgroup);
-        }
-      } catch (e) {
-        console.error("販売店データの読み込みに失敗しました", e);
-      }
-    }
-
-    document.getElementById('store_select').addEventListener('change', (e) => {
-      const selected = STORE_DATA.find(s => s.id === e.target.value);
-      const metaBox = document.getElementById('store_meta');
-      if (selected) {
-        document.getElementById('meta_id').textContent = selected.id || "-";
-        document.getElementById('meta_branch').textContent = selected.branch || "-";
-        document.getElementById('meta_pref').textContent = selected.pref || "-";
-        document.getElementById('meta_district').textContent = selected.district || "-";
-        document.getElementById('meta_group').textContent = selected.group_name || "-";
-        metaBox.style.display = 'block';
-      } else {
-        metaBox.style.display = 'none';
-      }
-    });
-
-    const INITIAL_DATA = [
-      { order_id: "ORD-1001", order_date: "2026-10-25 10:15", store_id: "1001", branch: "名古屋支社", store_name: "中日新聞 栄専売店", product_name: "パナソニック 4K液晶テレビ 55型", price: 148000 },
-      { order_id: "ORD-1002", order_date: "2026-10-26 14:30", store_id: "1002", branch: "名古屋支社", store_name: "中日新聞 名駅専売店", product_name: "ダイソン コードレス掃除機 V12", price: 68000 }
-    ];
-
-    function getOrders() {
-      const data = localStorage.getItem("demo_orders_v2");
-      return data ? JSON.parse(data) : INITIAL_DATA;
-    }
-
-    function renderTable() {
-      const orders = getOrders();
-      const tbody = document.getElementById("tableBody");
-      tbody.innerHTML = orders.map(o => `
-        <tr>
-          <td><span class="badge">${o.order_id}</span></td>
-          <td>${o.order_date.slice(5, 16)}</td>
-          <td>${o.store_id || "-"} <br><span style="font-size:10px; color:#666;">${o.branch || ""}</span></td>
-          <td>${o.store_name}</td>
-          <td>${o.product_name}</td>
-          <td>¥${Number(o.price).toLocaleString()}</td>
-        </tr>
-      `).join("");
-    }
-
-    document.getElementById("orderForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const selectedStoreId = document.getElementById("store_select").value;
-      const storeInfo = STORE_DATA.find(s => s.id === selectedStoreId);
-      if (!storeInfo) return;
-
-      const orders = getOrders();
-      const newOrder = {
-        order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
-        order_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
-        store_id: storeInfo.id,
-        branch: storeInfo.branch,
-        store_name: storeInfo.name,
-        product_name: document.getElementById("product_name").value,
-        price: parseInt(document.getElementById("price").value, 10)
-      };
-      orders.unshift(newOrder);
-      localStorage.setItem("demo_orders_v2", JSON.stringify(orders));
-      renderTable();
-      document.getElementById("product_name").value = "";
-      document.getElementById("price").value = "";
-    });
-
-    async function exportData(url) {
-      const orders = getOrders();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders })
-      });
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf";
-      a.click();
-    }
-
-    function resetDemo() {
-      localStorage.setItem("demo_orders_v2", JSON.stringify(INITIAL_DATA));
-      renderTable();
-    }
-
-    loadStores();
-    renderTable();
-  </script>
-</body>
-</html>
+    filename = f"edion_purchase_order_{datetime.now().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(
+        output,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
