@@ -13,9 +13,9 @@
     select:disabled { background: #f1f3f5; color: #888; cursor: not-allowed; }
     .store-detail-box { font-size: 12px; line-height: 1.6; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-top: 12px; }
     .status-badge { font-size: 12px; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; line-height: 1.4; }
-    .status-info { background: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; }
-    .status-error { background: #f8d7da; border: 1px solid #f5c2c7; color: #842029; }
+    .status-info { background: #fff3cd; border: 1px solid #ffe69c; color: #664d03; }
     .status-success { background: #d1e7dd; border: 1px solid #badbcc; color: #0f5132; }
+    .status-error { background: #f8d7da; border: 1px solid #f5c2c7; color: #842029; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -32,40 +32,29 @@
 <body>
   <div style="max-width: 1100px; margin: 0 auto 16px;">
     <h1 style="font-size: 20px; margin: 0;">中日新聞社・EDION 代理店連携 注文管理プロトタイプ</h1>
-    <p style="font-size: 13px; color: #666; margin: 4px 0 0;">販売店受付からEDIONへの発注・新聞社月次請求連携の一括検証モックアップ</p>
   </div>
 
   <div class="container">
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">販売店データを読み込み中...</div>
+      <div id="status_info" class="status-badge status-info">CSVファイルを直接読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
-        <select id="sel_pref" required>
-          <option value="">県を選択してください</option>
-        </select>
+        <select id="sel_pref" required><option value="">県を選択してください</option></select>
 
         <label>② 地区を選択</label>
-        <select id="sel_district" disabled required>
-          <option value="">まず県を選択してください</option>
-        </select>
+        <select id="sel_district" disabled required><option value="">まず県を選択してください</option></select>
 
         <label>③ 支部を選択</label>
-        <select id="sel_branch" disabled required>
-          <option value="">まず地区を選択してください</option>
-        </select>
+        <select id="sel_branch" disabled required><option value="">まず地区を選択してください</option></select>
 
         <label>④ 班を選択</label>
-        <select id="sel_group" disabled required>
-          <option value="">まず支部を選択してください</option>
-        </select>
+        <select id="sel_group" disabled required><option value="">まず支部を選択してください</option></select>
 
         <label>⑤ 販売店を選択（[店コード] 販売店名）</label>
-        <select id="sel_store" disabled required>
-          <option value="">まず班を選択してください</option>
-        </select>
+        <select id="sel_store" disabled required><option value="">まず班を選択してください</option></select>
 
         <div id="store_meta" class="store-detail-box" style="display: none;">
           <strong>店コード:</strong> <span id="meta_id">-</span> | <strong>店名:</strong> <span id="meta_name">-</span><br>
@@ -73,10 +62,10 @@
         </div>
 
         <label style="margin-top: 14px;">商品名・型番</label>
-        <input type="text" id="product_name" placeholder="例: 日立 エアコン 白くまくん" required>
+        <input type="text" id="product_name" required>
 
         <label>販売金額 (円)</label>
-        <input type="number" id="price" placeholder="例: 128000" required>
+        <input type="number" id="price" required>
 
         <button type="submit">新聞社へ注文送信</button>
       </form>
@@ -89,17 +78,9 @@
         <button class="btn-pdf" onclick="exportData('/api/export-pdf')">EDION宛て 発注書PDF 出力</button>
         <button style="background: #6c757d; width: auto;" onclick="resetDemo()">初期化</button>
       </div>
-
       <table id="orderTable">
         <thead>
-          <tr>
-            <th>発注番号</th>
-            <th>日時</th>
-            <th>店コード / 支部</th>
-            <th>販売店名</th>
-            <th>商品名</th>
-            <th>金額</th>
-          </tr>
+          <tr><th>発注番号</th><th>日時</th><th>店コード / 支部</th><th>販売店名</th><th>商品名</th><th>金額</th></tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
@@ -118,104 +99,61 @@
     const metaBox = document.getElementById('store_meta');
     const statusInfo = document.getElementById('status_info');
 
-    // プルダウンの初期化と絞り込み
-    function populatePrefectures() {
-      const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))].sort();
+    function initSelects() {
+      const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))];
       elPref.innerHTML = '<option value="">県を選択してください</option>';
       prefs.forEach(p => {
         const count = ALL_STORES.filter(s => s.pref === p).length;
         const opt = document.createElement('option');
-        opt.value = p;
-        opt.textContent = `${p} (${count}店)`;
-        elPref.appendChild(opt);
+        opt.value = p; opt.textContent = `${p} (${count}店)`; elPref.appendChild(opt);
       });
       elPref.disabled = false;
     }
 
     elPref.addEventListener('change', () => {
       const p = elPref.value;
-      resetSelect(elDistrict, "地区を選択してください");
-      resetSelect(elBranch, "まず地区を選択してください", true);
-      resetSelect(elGroup, "まず支部を選択してください", true);
-      resetSelect(elStore, "まず班を選択してください", true);
-      clearMeta();
-
+      resetSelect(elDistrict, "地区を選択してください"); resetSelect(elBranch, "まず地区を選択", true); resetSelect(elGroup, "まず支部を選択", true); resetSelect(elStore, "まず班を選択", true); clearMeta();
       if (!p) { elDistrict.disabled = true; return; }
-
-      const filtered = ALL_STORES.filter(s => s.pref === p);
-      const districts = [...new Set(filtered.map(s => s.district).filter(Boolean))].sort();
+      const districts = [...new Set(ALL_STORES.filter(s => s.pref === p).map(s => s.district).filter(Boolean))];
       districts.forEach(d => {
-        const count = filtered.filter(s => s.district === d).length;
-        const opt = document.createElement('option');
-        opt.value = d;
-        opt.textContent = `${d} (${count}店)`;
-        elDistrict.appendChild(opt);
+        const count = ALL_STORES.filter(s => s.pref === p && s.district === d).length;
+        const opt = document.createElement('option'); opt.value = d; opt.textContent = `${d} (${count}店)`; elDistrict.appendChild(opt);
       });
       elDistrict.disabled = false;
     });
 
     elDistrict.addEventListener('change', () => {
-      const p = elPref.value;
-      const d = elDistrict.value;
-      resetSelect(elBranch, "支部を選択してください");
-      resetSelect(elGroup, "まず支部を選択してください", true);
-      resetSelect(elStore, "まず班を選択してください", true);
-      clearMeta();
-
+      const p = elPref.value; const d = elDistrict.value;
+      resetSelect(elBranch, "支部を選択してください"); resetSelect(elGroup, "まず支部を選択", true); resetSelect(elStore, "まず班を選択", true); clearMeta();
       if (!d) { elBranch.disabled = true; return; }
-
-      const filtered = ALL_STORES.filter(s => s.pref === p && s.district === d);
-      const branches = [...new Set(filtered.map(s => s.branch).filter(Boolean))].sort();
+      const branches = [...new Set(ALL_STORES.filter(s => s.pref === p && s.district === d).map(s => s.branch).filter(Boolean))];
       branches.forEach(b => {
-        const count = filtered.filter(s => s.branch === b).length;
-        const opt = document.createElement('option');
-        opt.value = b;
-        opt.textContent = `${b} (${count}店)`;
-        elBranch.appendChild(opt);
+        const count = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b).length;
+        const opt = document.createElement('option'); opt.value = b; opt.textContent = `${b} (${count}店)`; elBranch.appendChild(opt);
       });
       elBranch.disabled = false;
     });
 
     elBranch.addEventListener('change', () => {
-      const p = elPref.value;
-      const d = elDistrict.value;
-      const b = elBranch.value;
-      resetSelect(elGroup, "班を選択してください");
-      resetSelect(elStore, "まず班を選択してください", true);
-      clearMeta();
-
+      const p = elPref.value; const d = elDistrict.value; const b = elBranch.value;
+      resetSelect(elGroup, "班を選択してください"); resetSelect(elStore, "まず班を選択", true); clearMeta();
       if (!b) { elGroup.disabled = true; return; }
-
-      const filtered = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b);
-      const groups = [...new Set(filtered.map(s => s.group_name).filter(Boolean))].sort();
+      const groups = [...new Set(ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b).map(s => s.group_name).filter(Boolean))];
       groups.forEach(g => {
-        const count = filtered.filter(s => s.group_name === g).length;
-        const opt = document.createElement('option');
-        opt.value = g;
-        opt.textContent = `${g} (${count}店)`;
-        elGroup.appendChild(opt);
+        const count = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b && s.group_name === g).length;
+        const opt = document.createElement('option'); opt.value = g; opt.textContent = `${g} (${count}店)`; elGroup.appendChild(opt);
       });
       elGroup.disabled = false;
     });
 
     elGroup.addEventListener('change', () => {
-      const p = elPref.value;
-      const d = elDistrict.value;
-      const b = elBranch.value;
-      const g = elGroup.value;
-      resetSelect(elStore, "販売店を選択してください");
-      clearMeta();
-
+      const p = elPref.value; const d = elDistrict.value; const b = elBranch.value; const g = elGroup.value;
+      resetSelect(elStore, "販売店を選択してください"); clearMeta();
       if (!g) { elStore.disabled = true; return; }
-
       const stores = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b && s.group_name === g);
-      stores.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-
+      stores.sort((x, y) => x.id.localeCompare(y.id, undefined, { numeric: true }));
       stores.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s._uid;
-        opt.textContent = `[${s.id}] ${s.name}`;
-        elStore.appendChild(opt);
+        const opt = document.createElement('option'); opt.value = s._uid; opt.textContent = `[${s.id}] ${s.name}`; elStore.appendChild(opt);
       });
       elStore.disabled = false;
     });
@@ -236,52 +174,64 @@
     });
 
     function resetSelect(el, placeholder, disabled = false) {
-      el.innerHTML = `<option value="">${placeholder}</option>`;
-      el.disabled = disabled;
+      el.innerHTML = `<option value="">${placeholder}</option>`; el.disabled = disabled;
     }
+    function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    function clearMeta() {
-      SELECTED_STORE = null;
-      metaBox.style.display = 'none';
-    }
-
-    // CSV/JSONデータの読み込み（完全固定のキー指定）
+    // バックエンドを経由せず、ブラウザで直接CSVファイルをダウンロードして分割する
     async function loadStores() {
-      try {
-        const res = await fetch('/stores.json');
-        if (res.ok) {
-          const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            
-            // 画像で確認した厳密なキー名で抽出
-            ALL_STORES = raw.map((item, idx) => ({
-              _uid: "store_" + idx,
-              pref: String(item.pref || item["pref"] || "不明県").trim(),
-              district: String(item.district || item["district"] || "不明地区").trim(),
-              branch: String(item.branch || item["branch"] || "不明支部").trim(),
-              // group_nam と欠けている場合も考慮
-              group_name: String(item.group_name || item.group_nam || "不明班").trim(),
-              name: String(item.name || item["name"] || `販売店${idx+1}`).trim(),
-              id: String(item.id || item["id"] || "").trim()
-            }));
+      let loaded = false;
+      let errLogs = [];
+      // 両方のファイル名に対応
+      const targets = ['/SHOPS.CSV', '/stores.csv'];
 
-            statusInfo.className = "status-badge status-success";
-            statusInfo.innerHTML = `✔ ${raw.length} 件の販売店データを正常に読み込みました`;
-            populatePrefectures();
-            return;
+      for (const url of targets) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const text = await res.text();
+            const lines = text.trim().split(/\r?\n/);
+            
+            if (lines.length > 1) {
+              ALL_STORES = [];
+              // 1行目（ヘッダー）を飛ばして2行目から読み込み
+              for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                if (cols.length >= 6) {
+                  ALL_STORES.push({
+                    _uid: "store_" + i,
+                    pref: cols[0].trim(),
+                    district: cols[1].trim(),
+                    branch: cols[2].trim(),
+                    group_name: cols[3].trim(),
+                    name: cols[4].trim(),
+                    id: cols[5].trim()
+                  });
+                }
+              }
+              
+              statusInfo.className = "status-badge status-success";
+              statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを ${url} から直接読み込みました`;
+              initSelects();
+              loaded = true;
+              break;
+            }
+          } else {
+            errLogs.push(`${url}: HTTP ${res.status}`);
           }
+        } catch (e) {
+          errLogs.push(`${url}: ${e.message}`);
         }
-      } catch (e) {
-        console.warn(e);
       }
       
-      // 万が一失敗した場合の代替データ
-      statusInfo.className = "status-badge status-error";
-      statusInfo.innerHTML = "⚠ 外部データの読み込みに失敗しました。";
+      if (!loaded) {
+        statusInfo.className = "status-badge status-error";
+        statusInfo.textContent = `⚠ 読み込み失敗 (${errLogs.join(' | ')}). CSVファイルが見つかりません。`;
+      }
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_final");
+      const data = localStorage.getItem("demo_orders_v14");
       return data ? JSON.parse(data) : [];
     }
 
@@ -302,13 +252,9 @@
 
     document.getElementById("orderForm").addEventListener("submit", function(e) {
       e.preventDefault();
-      if (!SELECTED_STORE) {
-        alert("⑤ 販売店まで選択してください");
-        return;
-      }
-
+      if (!SELECTED_STORE) { alert("販売店まで選択してください"); return; }
       const orders = getOrders();
-      const newOrder = {
+      orders.unshift({
         order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
         order_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
         store_id: SELECTED_STORE.id,
@@ -316,33 +262,21 @@
         store_name: SELECTED_STORE.name,
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
-      };
-      orders.unshift(newOrder);
-      localStorage.setItem("demo_orders_final", JSON.stringify(orders));
+      });
+      localStorage.setItem("demo_orders_v14", JSON.stringify(orders));
       renderTable();
-      document.getElementById("product_name").value = "";
-      document.getElementById("price").value = "";
+      document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
 
     async function exportData(url) {
       const orders = getOrders();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders })
-      });
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orders }) });
       const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf";
-      a.click();
+      const a = document.createElement("a"); a.href = window.URL.createObjectURL(blob);
+      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() {
-      localStorage.setItem("demo_orders_final", JSON.stringify([]));
-      renderTable();
-    }
+    function resetDemo() { localStorage.setItem("demo_orders_v14", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
