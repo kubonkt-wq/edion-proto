@@ -14,22 +14,23 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 app = FastAPI()
 
-# 日本語フォント登録（標準の平成明朝）
+# 日本語フォント登録
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
-# トップページ配信
+# プロジェクト直下のルートディレクトリ取得
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
-    html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
+    html_path = os.path.join(BASE_DIR, "index.html")
     if not os.path.exists(html_path):
         html_path = "index.html"
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
-# 販売店リストAPI（stores.json を返す）
 @app.get("/api/stores")
 async def get_stores():
-    json_path = os.path.join(os.path.dirname(__file__), "..", "stores.json")
+    json_path = os.path.join(BASE_DIR, "stores.json")
     if not os.path.exists(json_path):
         json_path = "stores.json"
     if os.path.exists(json_path):
@@ -51,7 +52,6 @@ class ExportPayload(BaseModel):
 
 @app.post("/api/export-excel")
 async def export_excel(payload: ExportPayload):
-    """新聞社が月次請求書に転記するためのExcel生成"""
     data = [item.dict() for item in payload.orders]
     df = pd.DataFrame(data)
     if df.empty:
@@ -81,28 +81,22 @@ async def export_excel(payload: ExportPayload):
 
 @app.post("/api/export-pdf")
 async def export_pdf(payload: ExportPayload):
-    """中日新聞社からEDIONへ送付する発注書PDF生成"""
     output = io.BytesIO()
     p = canvas.Canvas(output, pagesize=A4)
     p.setFont("HeiseiMin-W3", 16)
     
-    # ヘッダー情報
     p.drawString(50, 800, "発注書（EDION 御中）")
     p.setFont("HeiseiMin-W3", 10)
     p.drawString(400, 800, f"発行日: {datetime.now().strftime('%Y年%m月%d日')}")
     p.drawString(400, 785, "発注元: 株式会社中日新聞社")
-    
-    # 罫線
     p.line(50, 770, 550, 770)
     
-    # テーブル見出し
     p.drawString(50, 750, "発注番号")
     p.drawString(130, 750, "販売店（配送先識別）")
     p.drawString(280, 750, "発注商品名")
     p.drawString(480, 750, "金額（税込）")
     p.line(50, 740, 550, 740)
     
-    # 明細
     y = 720
     total = 0
     for item in payload.orders:
