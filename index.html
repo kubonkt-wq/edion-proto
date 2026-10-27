@@ -12,7 +12,10 @@
     select, input { width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
     select:disabled { background: #f1f3f5; color: #888; cursor: not-allowed; }
     .store-detail-box { font-size: 12px; line-height: 1.6; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-top: 12px; }
-    .status-badge { font-size: 11px; background: #e7f1ff; border: 1px solid #b6d4fe; padding: 6px 10px; border-radius: 4px; margin-bottom: 12px; color: #084298; }
+    .status-badge { font-size: 12px; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; line-height: 1.4; }
+    .status-info { background: #e7f1ff; border: 1px solid #b6d4fe; color: #084298; }
+    .status-error { background: #f8d7da; border: 1px solid #f5c2c7; color: #842029; }
+    .status-success { background: #d1e7dd; border: 1px solid #badbcc; color: #0f5132; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -36,7 +39,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge">販売店データを読み込み中...</div>
+      <div id="status_info" class="status-badge status-info">販売店データを読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -115,7 +118,7 @@
     const metaBox = document.getElementById('store_meta');
     const statusInfo = document.getElementById('status_info');
 
-    // ① 県の選択肢を生成
+    // プルダウンの初期化と絞り込み
     function populatePrefectures() {
       const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))].sort();
       elPref.innerHTML = '<option value="">県を選択してください</option>';
@@ -129,7 +132,6 @@
       elPref.disabled = false;
     }
 
-    // ① 県選択時 → ② 地区絞り込み
     elPref.addEventListener('change', () => {
       const p = elPref.value;
       resetSelect(elDistrict, "地区を選択してください");
@@ -138,14 +140,10 @@
       resetSelect(elStore, "まず班を選択してください", true);
       clearMeta();
 
-      if (!p) {
-        elDistrict.disabled = true;
-        return;
-      }
+      if (!p) { elDistrict.disabled = true; return; }
 
       const filtered = ALL_STORES.filter(s => s.pref === p);
       const districts = [...new Set(filtered.map(s => s.district).filter(Boolean))].sort();
-      
       districts.forEach(d => {
         const count = filtered.filter(s => s.district === d).length;
         const opt = document.createElement('option');
@@ -156,7 +154,6 @@
       elDistrict.disabled = false;
     });
 
-    // ② 地区選択時 → ③ 支部絞り込み
     elDistrict.addEventListener('change', () => {
       const p = elPref.value;
       const d = elDistrict.value;
@@ -165,14 +162,10 @@
       resetSelect(elStore, "まず班を選択してください", true);
       clearMeta();
 
-      if (!d) {
-        elBranch.disabled = true;
-        return;
-      }
+      if (!d) { elBranch.disabled = true; return; }
 
       const filtered = ALL_STORES.filter(s => s.pref === p && s.district === d);
       const branches = [...new Set(filtered.map(s => s.branch).filter(Boolean))].sort();
-      
       branches.forEach(b => {
         const count = filtered.filter(s => s.branch === b).length;
         const opt = document.createElement('option');
@@ -183,7 +176,6 @@
       elBranch.disabled = false;
     });
 
-    // ③ 支部選択時 → ④ 班絞り込み
     elBranch.addEventListener('change', () => {
       const p = elPref.value;
       const d = elDistrict.value;
@@ -192,14 +184,10 @@
       resetSelect(elStore, "まず班を選択してください", true);
       clearMeta();
 
-      if (!b) {
-        elGroup.disabled = true;
-        return;
-      }
+      if (!b) { elGroup.disabled = true; return; }
 
       const filtered = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b);
       const groups = [...new Set(filtered.map(s => s.group_name).filter(Boolean))].sort();
-      
       groups.forEach(g => {
         const count = filtered.filter(s => s.group_name === g).length;
         const opt = document.createElement('option');
@@ -210,7 +198,6 @@
       elGroup.disabled = false;
     });
 
-    // ④ 班選択時 → ⑤ 販売店をコード順で絞り込み
     elGroup.addEventListener('change', () => {
       const p = elPref.value;
       const d = elDistrict.value;
@@ -219,10 +206,7 @@
       resetSelect(elStore, "販売店を選択してください");
       clearMeta();
 
-      if (!g) {
-        elStore.disabled = true;
-        return;
-      }
+      if (!g) { elStore.disabled = true; return; }
 
       const stores = ALL_STORES.filter(s => s.pref === p && s.district === d && s.branch === b && s.group_name === g);
       stores.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
@@ -230,22 +214,18 @@
       stores.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s._uid;
-        opt.textContent = s.id ? `[${s.id}] ${s.name}` : s.name;
+        opt.textContent = `[${s.id}] ${s.name}`;
         elStore.appendChild(opt);
       });
       elStore.disabled = false;
     });
 
-    // ⑤ 店舗選択時
     elStore.addEventListener('change', () => {
       const uid = elStore.value;
-      if (!uid) {
-        clearMeta();
-        return;
-      }
+      if (!uid) { clearMeta(); return; }
       SELECTED_STORE = ALL_STORES.find(s => s._uid === uid);
       if (SELECTED_STORE) {
-        document.getElementById('meta_id').textContent = SELECTED_STORE.id || "未設定";
+        document.getElementById('meta_id').textContent = SELECTED_STORE.id;
         document.getElementById('meta_name').textContent = SELECTED_STORE.name;
         document.getElementById('meta_pref').textContent = SELECTED_STORE.pref;
         document.getElementById('meta_district').textContent = SELECTED_STORE.district;
@@ -265,57 +245,43 @@
       metaBox.style.display = 'none';
     }
 
-    // 列の先頭（県）と末尾（ID）の構造に最適化したローダー
+    // CSV/JSONデータの読み込み（完全固定のキー指定）
     async function loadStores() {
       try {
         const res = await fetch('/stores.json');
         if (res.ok) {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 0) {
-            const firstRow = raw[0];
-            const keys = Object.keys(firstRow);
+            
+            // 画像で確認した厳密なキー名で抽出
+            ALL_STORES = raw.map((item, idx) => ({
+              _uid: "store_" + idx,
+              pref: String(item.pref || item["pref"] || "不明県").trim(),
+              district: String(item.district || item["district"] || "不明地区").trim(),
+              branch: String(item.branch || item["branch"] || "不明支部").trim(),
+              // group_nam と欠けている場合も考慮
+              group_name: String(item.group_name || item.group_nam || "不明班").trim(),
+              name: String(item.name || item["name"] || `販売店${idx+1}`).trim(),
+              id: String(item.id || item["id"] || "").trim()
+            }));
 
-            // 列の特定（名前でも位置でも確実に拾えるハイブリッド型）
-            const kPref = keys.find(k => k.match(/県|pref|prref/i)) || keys[0];
-            const kDistrict = keys.find(k => k.match(/地区|市|district/i)) || keys[1];
-            const kBranch = keys.find(k => k.match(/支部|branch/i)) || keys[2];
-            const kGroup = keys.find(k => k.match(/班|グループ|group/i)) || keys[3];
-            const kName = keys.find(k => k.match(/店名|販売店|店舗|name/i)) || keys[4];
-            // IDは末尾に回されたため、末尾の列を最優先でIDとして認識
-            const kId = keys.find(k => k.match(/コード|code/i)) || keys[keys.length - 1];
-
-            statusInfo.innerHTML = `✔ ${raw.length} 件の販売店を認識しました`;
-
-            ALL_STORES = raw.map((item, idx) => {
-              const pref = item[kPref] ? String(item[kPref]).trim() : "愛知県";
-              const district = item[kDistrict] ? String(item[kDistrict]).trim() : "一般地区";
-              const branch = item[kBranch] ? String(item[kBranch]).trim() : "一般支部";
-              const group_name = item[kGroup] ? String(item[kGroup]).trim() : "一般班";
-              const name = item[kName] ? String(item[kName]).trim() : `販売店${idx+1}`;
-              const id = item[kId] ? String(item[kId]).trim() : String(1000 + idx);
-
-              return {
-                _uid: "store_" + idx,
-                id,
-                name,
-                pref,
-                district,
-                branch,
-                group_name
-              };
-            });
+            statusInfo.className = "status-badge status-success";
+            statusInfo.innerHTML = `✔ ${raw.length} 件の販売店データを正常に読み込みました`;
+            populatePrefectures();
+            return;
           }
         }
       } catch (e) {
-        console.warn("stores.json の読み込みに失敗しました", e);
-        statusInfo.textContent = "⚠ 店舗データの取得に失敗しました。";
+        console.warn(e);
       }
-
-      populatePrefectures();
+      
+      // 万が一失敗した場合の代替データ
+      statusInfo.className = "status-badge status-error";
+      statusInfo.innerHTML = "⚠ 外部データの読み込みに失敗しました。";
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v10");
+      const data = localStorage.getItem("demo_orders_final");
       return data ? JSON.parse(data) : [];
     }
 
@@ -352,7 +318,7 @@
         price: parseInt(document.getElementById("price").value, 10)
       };
       orders.unshift(newOrder);
-      localStorage.setItem("demo_orders_v10", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_final", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = "";
       document.getElementById("price").value = "";
@@ -374,7 +340,7 @@
     }
 
     function resetDemo() {
-      localStorage.setItem("demo_orders_v10", JSON.stringify([]));
+      localStorage.setItem("demo_orders_final", JSON.stringify([]));
       renderTable();
     }
 
