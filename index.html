@@ -12,7 +12,7 @@
     select, input { width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
     select:disabled { background: #f1f3f5; color: #888; cursor: not-allowed; }
     .store-detail-box { font-size: 12px; line-height: 1.6; color: #155724; background: #d4edda; border: 1px solid #c3e6cb; padding: 10px; border-radius: 4px; margin-top: 12px; }
-    .debug-badge { font-size: 11px; background: #e9ecef; border: 1px solid #ced4da; padding: 6px 10px; border-radius: 4px; margin-bottom: 12px; color: #495057; line-height: 1.4; }
+    .status-badge { font-size: 11px; background: #e7f1ff; border: 1px solid #b6d4fe; padding: 6px 10px; border-radius: 4px; margin-bottom: 12px; color: #084298; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -36,8 +36,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <!-- 読み取り状態の確認用情報 -->
-      <div id="debug_info" class="debug-badge">データ解析中...</div>
+      <div id="status_info" class="status-badge">販売店データを読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -105,16 +104,6 @@
   </div>
 
   <script>
-    // 安全用バックアップデータ（絶対に画面が止まらないように保持）
-    const FALLBACK_STORES = [
-      { id: "1001", pref: "愛知県", district: "名古屋市中区", branch: "名古屋中央支部", group_name: "中区東班", name: "中日新聞 栄専売店" },
-      { id: "1002", pref: "愛知県", district: "名古屋市中村区", branch: "名古屋中央支部", group_name: "名駅班", name: "中日新聞 名駅専売店" },
-      { id: "1003", pref: "愛知県", district: "豊橋市", branch: "豊橋支部", group_name: "豊橋東班", name: "中日新聞 豊橋中央店" },
-      { id: "2001", pref: "岐阜県", district: "岐阜市", branch: "岐阜中央支部", group_name: "岐阜本町班", name: "中日新聞 岐阜本町専売店" },
-      { id: "3001", pref: "三重県", district: "津市", branch: "津支部", group_name: "津中央班", name: "中日新聞 津中央専売店" },
-      { id: "4001", pref: "静岡県", district: "浜松市", branch: "浜松支部", group_name: "浜松駅前班", name: "中日新聞 浜松中央専売店" }
-    ];
-
     let ALL_STORES = [];
     let SELECTED_STORE = null;
 
@@ -124,9 +113,9 @@
     const elGroup = document.getElementById('sel_group');
     const elStore = document.getElementById('sel_store');
     const metaBox = document.getElementById('store_meta');
-    const debugInfo = document.getElementById('debug_info');
+    const statusInfo = document.getElementById('status_info');
 
-    // ① 県の初期化
+    // ① 県の選択肢を生成
     function populatePrefectures() {
       const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))].sort();
       elPref.innerHTML = '<option value="">県を選択してください</option>';
@@ -276,7 +265,7 @@
       metaBox.style.display = 'none';
     }
 
-    // データの列を値からスマートに自動判別する
+    // 列の先頭（県）と末尾（ID）の構造に最適化したローダー
     async function loadStores() {
       try {
         const res = await fetch('/stores.json');
@@ -284,66 +273,49 @@
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 0) {
             const firstRow = raw[0];
-            const allKeys = Object.keys(firstRow);
+            const keys = Object.keys(firstRow);
 
-            // 各列の役割を判定
-            // 1. 県の列を探す（キー名に「県」がある、または値に「県」「都」「府」「道」が含まれるキー）
-            let prefKey = allKeys.find(k => k.includes("県") || k.includes("都道府県") || k.toLowerCase().includes("pref"));
-            if (!prefKey) {
-              prefKey = allKeys.find(k => String(firstRow[k]).includes("愛知") || String(firstRow[k]).includes("岐阜") || String(firstRow[k]).includes("三重") || String(firstRow[k]).includes("静岡"));
-            }
+            // 列の特定（名前でも位置でも確実に拾えるハイブリッド型）
+            const kPref = keys.find(k => k.match(/県|pref|prref/i)) || keys[0];
+            const kDistrict = keys.find(k => k.match(/地区|市|district/i)) || keys[1];
+            const kBranch = keys.find(k => k.match(/支部|branch/i)) || keys[2];
+            const kGroup = keys.find(k => k.match(/班|グループ|group/i)) || keys[3];
+            const kName = keys.find(k => k.match(/店名|販売店|店舗|name/i)) || keys[4];
+            // IDは末尾に回されたため、末尾の列を最優先でIDとして認識
+            const kId = keys.find(k => k.match(/コード|code/i)) || keys[keys.length - 1];
 
-            // 2. 支部の列を探す
-            let branchKey = allKeys.find(k => k.includes("支部"));
-
-            // 3. 班の列を探す
-            let groupKey = allKeys.find(k => k.includes("班") || k.includes("グループ"));
-
-            // 4. 販売店名の列を探す
-            let nameKey = allKeys.find(k => k.includes("店名") || k.includes("販売店名") || k.includes("店舗名") || k.includes("専売店"));
-
-            // 5. 店コードの列を探す（ID列ではなく「コード」を探す）
-            let codeKey = allKeys.find(k => k.includes("コード"));
-
-            // 6. 地区の列を探す（上記に当てはまらないキーのうち、地区・市区町村など）
-            let districtKey = allKeys.find(k => k.includes("地区") || k.includes("市") || k.includes("町"));
-
-            debugInfo.innerHTML = `✔ データ読込成功: ${raw.length}件<br><small>判定列名: 県=[${prefKey||'未検出'}] / 地区=[${districtKey||'未検出'}] / 支部=[${branchKey||'未検出'}] / 班=[${groupKey||'未検出'}] / 店名=[${nameKey||'未検出'}]</small>`;
+            statusInfo.innerHTML = `✔ ${raw.length} 件の販売店を認識しました`;
 
             ALL_STORES = raw.map((item, idx) => {
-              const prefVal = prefKey && item[prefKey] ? String(item[prefKey]).trim() : "愛知県";
-              const districtVal = districtKey && item[districtKey] ? String(item[districtKey]).trim() : "一般地区";
-              const branchVal = branchKey && item[branchKey] ? String(item[branchKey]).trim() : "一般支部";
-              const groupVal = groupKey && item[groupKey] ? String(item[groupKey]).trim() : "一般班";
-              const nameVal = nameKey && item[nameKey] ? String(item[nameKey]).trim() : (item[allKeys[allKeys.length - 1]] || `販売店${idx+1}`);
-              const codeVal = codeKey && item[codeKey] ? String(item[codeKey]).trim() : String(1000 + idx);
+              const pref = item[kPref] ? String(item[kPref]).trim() : "愛知県";
+              const district = item[kDistrict] ? String(item[kDistrict]).trim() : "一般地区";
+              const branch = item[kBranch] ? String(item[kBranch]).trim() : "一般支部";
+              const group_name = item[kGroup] ? String(item[kGroup]).trim() : "一般班";
+              const name = item[kName] ? String(item[kName]).trim() : `販売店${idx+1}`;
+              const id = item[kId] ? String(item[kId]).trim() : String(1000 + idx);
 
               return {
                 _uid: "store_" + idx,
-                id: codeVal,
-                name: nameVal,
-                pref: prefVal,
-                district: districtVal,
-                branch: branchVal,
-                group_name: groupVal
+                id,
+                name,
+                pref,
+                district,
+                branch,
+                group_name
               };
             });
           }
         }
       } catch (e) {
-        console.warn("外部読み込み失敗、フォールバックを使用", e);
-        debugInfo.innerHTML = "⚠ 外部通信に失敗したため、初期マスターデータで稼働しています。";
-      }
-
-      if (ALL_STORES.length === 0) {
-        ALL_STORES = FALLBACK_STORES.map((s, idx) => ({ ...s, _uid: "fb_" + idx }));
+        console.warn("stores.json の読み込みに失敗しました", e);
+        statusInfo.textContent = "⚠ 店舗データの取得に失敗しました。";
       }
 
       populatePrefectures();
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v9");
+      const data = localStorage.getItem("demo_orders_v10");
       return data ? JSON.parse(data) : [];
     }
 
@@ -380,7 +352,7 @@
         price: parseInt(document.getElementById("price").value, 10)
       };
       orders.unshift(newOrder);
-      localStorage.setItem("demo_orders_v9", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v10", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = "";
       document.getElementById("price").value = "";
@@ -402,7 +374,7 @@
     }
 
     function resetDemo() {
-      localStorage.setItem("demo_orders_v9", JSON.stringify([]));
+      localStorage.setItem("demo_orders_v10", JSON.stringify([]));
       renderTable();
     }
 
