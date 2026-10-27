@@ -38,7 +38,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">CSVデータを画面上で直接読み込み中...</div>
+      <div id="status_info" class="status-badge status-info">CSVデータを全パターンで検索中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -178,47 +178,58 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // サーバーを経由せず、ブラウザが直接小文字の stores.csv を読み込む
+    // 存在する可能性のあるファイル名をすべてアタックし、結果を画面に出す
     async function loadStores() {
-      try {
-        const res = await fetch('/stores.csv');
-        if (res.ok) {
-          const text = await res.text();
-          const lines = text.trim().split(/\r?\n/);
-          
-          if (lines.length > 1) {
-            ALL_STORES = [];
-            for (let i = 1; i < lines.length; i++) {
-              const cols = lines[i].split(',');
-              if (cols.length >= 6) {
-                ALL_STORES.push({
-                  _uid: "store_" + i,
-                  pref: cols[0].trim(),
-                  district: cols[1].trim(),
-                  branch: cols[2].trim(),
-                  group_name: cols[3].trim(),
-                  name: cols[4].trim(),
-                  id: cols[5].trim()
-                });
-              }
-            }
+      let loaded = false;
+      let errLogs = [];
+      const targets = ['/stores.csv', '/SHOPS.CSV', '/shops.csv', '/STORES.CSV'];
+
+      for (const url of targets) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const text = await res.text();
+            const lines = text.trim().split(/\r?\n/);
             
-            statusInfo.className = "status-badge status-success";
-            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを画面上に直接読み込みました`;
-            initSelects();
-            return;
+            if (lines.length > 1) {
+              ALL_STORES = [];
+              for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                if (cols.length >= 6) {
+                  ALL_STORES.push({
+                    _uid: "store_" + i,
+                    pref: cols[0].trim(),
+                    district: cols[1].trim(),
+                    branch: cols[2].trim(),
+                    group_name: cols[3].trim(),
+                    name: cols[4].trim(),
+                    id: cols[5].trim()
+                  });
+                }
+              }
+              
+              statusInfo.className = "status-badge status-success";
+              statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを「${url}」から直接読み込みました！`;
+              initSelects();
+              loaded = true;
+              break;
+            }
+          } else {
+            errLogs.push(`[${url}: HTTP ${res.status}]`);
           }
+        } catch (e) {
+          errLogs.push(`[${url}: ${e.message}]`);
         }
-      } catch (e) {
-         console.error(e);
       }
       
-      statusInfo.className = "status-badge status-error";
-      statusInfo.textContent = `⚠ CSVファイルの直接読み込みに失敗しました。`;
+      if (!loaded) {
+        statusInfo.className = "status-badge status-error";
+        statusInfo.innerHTML = `⚠ 読み込み失敗。以下の全パターンを試しましたがファイルがありません。<br>${errLogs.join(' / ')}`;
+      }
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v16");
+      const data = localStorage.getItem("demo_orders_v17");
       return data ? JSON.parse(data) : [];
     }
 
@@ -250,7 +261,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v16", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v17", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -263,7 +274,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v16", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v17", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
