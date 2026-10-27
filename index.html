@@ -38,7 +38,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">サーバーと通信中...</div>
+      <div id="status_info" class="status-badge status-info">CSVデータを画面上で直接読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -178,25 +178,33 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // API (/api/stores) 経由でデータを取得
+    // サーバーを経由せず、ブラウザが直接小文字の stores.csv を読み込む
     async function loadStores() {
       try {
-        const res = await fetch('/api/stores');
+        const res = await fetch('/stores.csv');
         if (res.ok) {
-          const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            ALL_STORES = raw.map((item, idx) => ({
-              _uid: "store_" + idx,
-              pref: String(item.pref || item["県"] || "").trim(),
-              district: String(item.district || item["地区"] || "").trim(),
-              branch: String(item.branch || item["支部"] || "").trim(),
-              group_name: String(item.group_name || item["班"] || "").trim(),
-              name: String(item.name || item["店舗名"] || "").trim(),
-              id: String(item.id || item["コード"] || "").trim()
-            }));
+          const text = await res.text();
+          const lines = text.trim().split(/\r?\n/);
+          
+          if (lines.length > 1) {
+            ALL_STORES = [];
+            for (let i = 1; i < lines.length; i++) {
+              const cols = lines[i].split(',');
+              if (cols.length >= 6) {
+                ALL_STORES.push({
+                  _uid: "store_" + i,
+                  pref: cols[0].trim(),
+                  district: cols[1].trim(),
+                  branch: cols[2].trim(),
+                  group_name: cols[3].trim(),
+                  name: cols[4].trim(),
+                  id: cols[5].trim()
+                });
+              }
+            }
             
             statusInfo.className = "status-badge status-success";
-            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データをサーバーから読み込みました`;
+            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを画面上に直接読み込みました`;
             initSelects();
             return;
           }
@@ -206,11 +214,11 @@
       }
       
       statusInfo.className = "status-badge status-error";
-      statusInfo.textContent = `⚠ 読み込み失敗: stores.csv がサーバー上で見つかりません。`;
+      statusInfo.textContent = `⚠ CSVファイルの直接読み込みに失敗しました。`;
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v15");
+      const data = localStorage.getItem("demo_orders_v16");
       return data ? JSON.parse(data) : [];
     }
 
@@ -242,7 +250,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v15", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v16", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -255,7 +263,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v15", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v16", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
