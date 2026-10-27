@@ -11,6 +11,9 @@
     label { display: block; font-size: 13px; font-weight: bold; margin-top: 12px; }
     select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
     .store-detail-box { font-size: 12px; line-height: 1.6; color: #333; background: #eef4fa; border: 1px solid #c9dff0; padding: 10px; border-radius: 4px; margin-top: 8px; }
+    .status-alert { font-size: 12px; padding: 8px; border-radius: 4px; margin-top: 8px; }
+    .status-error { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+    .status-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -38,6 +41,9 @@
         <select id="store_select" required>
           <option value="">読み込み中...</option>
         </select>
+
+        <!-- 読み込み状態・エラーのリアルタイム表示 -->
+        <div id="status_box" class="status-alert status-error" style="display: none;"></div>
 
         <div id="store_meta" class="store-detail-box" style="display: none;">
           <strong>店ID:</strong> <span id="meta_id">-</span> | <strong>管轄支社:</strong> <span id="meta_branch">-</span><br>
@@ -81,7 +87,15 @@
   <script>
     let STORE_DATA = [];
 
-    // ヘッダー名が日本語・英語どちらでも吸収するヘルパー関数
+    // 通信障害時の内蔵バックアップデータ（主要支社の代表店）
+    const FALLBACK_STORES = [
+      { id: "1001", pref: "愛知県", district: "名古屋市中区", branch: "名古屋支社", group_name: "中区会", name: "中日新聞 栄専売店" },
+      { id: "1002", pref: "愛知県", district: "名古屋市中村区", branch: "名古屋支社", group_name: "名駅会", name: "中日新聞 名駅専売店" },
+      { id: "1003", pref: "愛知県", district: "豊橋市", branch: "三河支社", group_name: "豊橋東会", name: "中日新聞 豊橋中央店" },
+      { id: "2001", pref: "岐阜県", district: "岐阜市", branch: "岐阜支社", group_name: "岐阜中央会", name: "中日新聞 岐阜本町専売店" },
+      { id: "3001", pref: "三重県", district: "津市", branch: "三重総局", group_name: "津会", name: "中日新聞 津中央専売店" }
+    ];
+
     function getVal(item, ...keys) {
       for (const k of keys) {
         if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== "") {
@@ -91,132 +105,43 @@
       return "";
     }
 
-    async function loadStores() {
-      try {
-        const res = await fetch('/stores.json');
-        STORE_DATA = await res.json();
-        const select = document.getElementById('store_select');
-        select.innerHTML = '<option value="">販売店を選択してください</option>';
+    function populateSelect(data) {
+      STORE_DATA = data;
+      const select = document.getElementById('store_select');
+      select.innerHTML = '<option value="">販売店を選択してください</option>';
 
-        const grouped = {};
-        STORE_DATA.forEach((s, idx) => {
-          const pref = getVal(s, 'pref', '県', '都道府県') || "その他";
-          if (!grouped[pref]) grouped[pref] = [];
-          grouped[pref].push({ ...s, _idx: idx });
-        });
-
-        for (const pref in grouped) {
-          const optgroup = document.createElement('optgroup');
-          optgroup.label = `【${pref}】`;
-          grouped[pref].forEach(s => {
-            const opt = document.createElement('option');
-            // 配列インデックスで一意に紐付け（IDの型ズレによる失敗を完全防止）
-            opt.value = s._idx;
-            const id = getVal(s, 'id', '販売店ID', '店コード', 'コード');
-            const name = getVal(s, 'name', '販売店名', '店舗名', '店名');
-            const branch = getVal(s, 'branch', '支社', '管轄支社');
-            opt.textContent = `[${id || 'ID無'}] ${name || '名称未設定'} ${branch ? '(' + branch + ')' : ''}`;
-            optgroup.appendChild(opt);
-          });
-          select.appendChild(optgroup);
-        }
-      } catch (e) {
-        console.error("販売店データの読み込みに失敗しました", e);
-      }
-    }
-
-    // 店舗選択時の連動処理
-    document.getElementById('store_select').addEventListener('change', (e) => {
-      const idx = e.target.value;
-      const metaBox = document.getElementById('store_meta');
-      
-      if (idx !== "") {
-        const selected = STORE_DATA[parseInt(idx, 10)];
-        if (selected) {
-          document.getElementById('meta_id').textContent = getVal(selected, 'id', '販売店ID', '店コード') || "-";
-          document.getElementById('meta_branch').textContent = getVal(selected, 'branch', '支社', '管轄支社') || "-";
-          document.getElementById('meta_pref').textContent = getVal(selected, 'pref', '県', '都道府県') || "-";
-          document.getElementById('meta_district').textContent = getVal(selected, 'district', '地区', '市区町村') || "-";
-          document.getElementById('meta_group').textContent = getVal(selected, 'group_name', 'グループ', 'グループ名') || "-";
-          metaBox.style.display = 'block';
-          return;
-        }
-      }
-      metaBox.style.display = 'none';
-    });
-
-    const INITIAL_DATA = [
-      { order_id: "ORD-1001", order_date: "2026-10-25 10:15", store_id: "1001", branch: "名古屋支社", store_name: "中日新聞 栄専売店", product_name: "パナソニック 4K液晶テレビ 55型", price: 148000 },
-      { order_id: "ORD-1002", order_date: "2026-10-26 14:30", store_id: "1002", branch: "名古屋支社", store_name: "中日新聞 名駅専売店", product_name: "ダイソン コードレス掃除機 V12", price: 68000 }
-    ];
-
-    function getOrders() {
-      const data = localStorage.getItem("demo_orders_v2");
-      return data ? JSON.parse(data) : INITIAL_DATA;
-    }
-
-    function renderTable() {
-      const orders = getOrders();
-      const tbody = document.getElementById("tableBody");
-      tbody.innerHTML = orders.map(o => `
-        <tr>
-          <td><span class="badge">${o.order_id}</span></td>
-          <td>${o.order_date.slice(5, 16)}</td>
-          <td>${o.store_id || "-"} <br><span style="font-size:10px; color:#666;">${o.branch || ""}</span></td>
-          <td>${o.store_name}</td>
-          <td>${o.product_name}</td>
-          <td>¥${Number(o.price).toLocaleString()}</td>
-        </tr>
-      `).join("");
-    }
-
-    document.getElementById("orderForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const idx = document.getElementById("store_select").value;
-      if (idx === "") return;
-      
-      const storeInfo = STORE_DATA[parseInt(idx, 10)];
-      if (!storeInfo) return;
-
-      const orders = getOrders();
-      const newOrder = {
-        order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
-        order_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
-        store_id: getVal(storeInfo, 'id', '販売店ID', '店コード'),
-        branch: getVal(storeInfo, 'branch', '支社', '管轄支社'),
-        store_name: getVal(storeInfo, 'name', '販売店名', '店舗名', '店名'),
-        product_name: document.getElementById("product_name").value,
-        price: parseInt(document.getElementById("price").value, 10)
-      };
-      orders.unshift(newOrder);
-      localStorage.setItem("demo_orders_v2", JSON.stringify(orders));
-      renderTable();
-      document.getElementById("product_name").value = "";
-      document.getElementById("price").value = "";
-    });
-
-    async function exportData(url) {
-      const orders = getOrders();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orders })
+      const grouped = {};
+      STORE_DATA.forEach((s, idx) => {
+        const pref = getVal(s, 'pref', '県', '都道府県') || "その他";
+        if (!grouped[pref]) grouped[pref] = [];
+        grouped[pref].push({ ...s, _idx: idx });
       });
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf";
-      a.click();
+
+      for (const pref in grouped) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = `【${pref}】`;
+        grouped[pref].forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s._idx;
+          const id = getVal(s, 'id', '販売店ID', '店コード');
+          const name = getVal(s, 'name', '販売店名', '店舗名', '店名');
+          const branch = getVal(s, 'branch', '支社', '管轄支社');
+          opt.textContent = `[${id || 'ID無'}] ${name || '名称未設定'} ${branch ? '(' + branch + ')' : ''}`;
+          optgroup.appendChild(opt);
+        });
+        select.appendChild(optgroup);
+      }
     }
 
-    function resetDemo() {
-      localStorage.setItem("demo_orders_v2", JSON.stringify(INITIAL_DATA));
-      renderTable();
-    }
+    async function loadStores() {
+      const statusBox = document.getElementById('status_box');
+      const endpoints = ['/stores.json', '/api/stores', 'stores.json'];
+      let loaded = false;
 
-    loadStores();
-    renderTable();
-  </script>
-</body>
-</html>
+      for (const url of endpoints) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              populateSelect(data);
