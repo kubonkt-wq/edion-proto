@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 import pandas as pd
 from reportlab.lib.pagesizes import A4
@@ -17,7 +17,20 @@ app = FastAPI()
 # 日本語フォント登録
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
-# トップページ (index.html) の配信
+def get_stores_data():
+    """stores.json を確実に読み込む"""
+    candidates = [
+        "stores.json",
+        os.path.join(os.path.dirname(__file__), "..", "stores.json"),
+        os.path.join(os.path.dirname(__file__), "stores.json")
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+    return []
+
+# トップページ
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
     html_path = "index.html"
@@ -26,17 +39,12 @@ async def serve_home():
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
-# 販売店リストAPI（ルート直下の stores.json を直接読み込み）
+# どのURLからリクエストが来ても店舗データを返す
+@app.get("/stores.json")
 @app.get("/api/stores")
 @app.get("/stores")
 async def get_stores():
-    json_path = "stores.json"
-    if not os.path.exists(json_path):
-        json_path = os.path.join(os.path.dirname(__file__), "..", "stores.json")
-    if os.path.exists(json_path):
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    return JSONResponse(content=get_stores_data())
 
 class OrderItem(BaseModel):
     order_id: str
