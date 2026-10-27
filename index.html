@@ -5,11 +5,12 @@
   <title>【デモ版】中日新聞社 × EDION 代理店発注プラットフォーム</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 24px; color: #333; }
-    .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 360px 1fr; gap: 24px; }
+    .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
     .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
     h2 { font-size: 16px; margin-top: 0; border-bottom: 2px solid #005bac; padding-bottom: 8px; color: #005bac; }
     label { display: block; font-size: 13px; font-weight: bold; margin-top: 12px; }
     select, input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    .store-detail-box { font-size: 11px; color: #555; background: #eef4fa; padding: 8px; border-radius: 4px; margin-top: 6px; }
     button { width: 100%; padding: 10px; margin-top: 16px; background: #005bac; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
     button:hover { background: #004582; }
     .btn-secondary { background: #28a745; margin-top: 0; }
@@ -24,7 +25,7 @@
   </style>
 </head>
 <body>
-  <div style="max-width: 1000px; margin: 0 auto 16px;">
+  <div style="max-width: 1100px; margin: 0 auto 16px;">
     <h1 style="font-size: 20px; margin: 0;">中日新聞社・EDION 代理店連携 注文管理プロトタイプ</h1>
     <p style="font-size: 13px; color: #666; margin: 4px 0 0;">販売店受付からEDIONへの発注・新聞社月次請求連携の一括検証モックアップ</p>
   </div>
@@ -33,14 +34,15 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       <form id="orderForm">
-        <label>販売店名</label>
-        <select id="store_name" required>
-          <option value="">選択してください</option>
-          <option value="中日新聞 栄専売店">中日新聞 栄専売店</option>
-          <option value="中日新聞 名駅専売店">中日新聞 名駅専売店</option>
-          <option value="中日新聞 千種専売店">中日新聞 千種専売店</option>
-          <option value="中日新聞 豊田専売店">中日新聞 豊田専売店</option>
+        <label>販売店を選択</label>
+        <select id="store_select" required>
+          <option value="">読み込み中...</option>
         </select>
+
+        <div id="store_meta" class="store-detail-box" style="display: none;">
+          店ID: <span id="meta_id">-</span> | 支社: <span id="meta_branch">-</span><br>
+          地域: <span id="meta_pref">-</span> <span id="meta_district">-</span> (<span id="meta_group">-</span>)
+        </div>
 
         <label>商品名・型番</label>
         <input type="text" id="product_name" placeholder="例: 日立 エアコン 白くまくん" required>
@@ -65,6 +67,7 @@
           <tr>
             <th>発注番号</th>
             <th>日時</th>
+            <th>店ID / 支社</th>
             <th>販売店名</th>
             <th>商品名</th>
             <th>金額</th>
@@ -76,13 +79,60 @@
   </div>
 
   <script>
+    let STORE_DATA = [];
+
+    async function loadStores() {
+      try {
+        const res = await fetch('/api/stores');
+        STORE_DATA = await res.json();
+        const select = document.getElementById('store_select');
+        select.innerHTML = '<option value="">販売店を選択してください</option>';
+
+        const grouped = {};
+        STORE_DATA.forEach(s => {
+          const pref = s.pref || "その他";
+          if (!grouped[pref]) grouped[pref] = [];
+          grouped[pref].push(s);
+        });
+
+        for (const pref in grouped) {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = `【${pref}】`;
+          grouped[pref].forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = `[${s.id}] ${s.name} (${s.branch || ''})`;
+            optgroup.appendChild(opt);
+          });
+          select.appendChild(optgroup);
+        }
+      } catch (e) {
+        console.error("販売店データの読み込みに失敗しました", e);
+      }
+    }
+
+    document.getElementById('store_select').addEventListener('change', (e) => {
+      const selected = STORE_DATA.find(s => s.id === e.target.value);
+      const metaBox = document.getElementById('store_meta');
+      if (selected) {
+        document.getElementById('meta_id').textContent = selected.id || "-";
+        document.getElementById('meta_branch').textContent = selected.branch || "-";
+        document.getElementById('meta_pref').textContent = selected.pref || "-";
+        document.getElementById('meta_district').textContent = selected.district || "-";
+        document.getElementById('meta_group').textContent = selected.group_name || "-";
+        metaBox.style.display = 'block';
+      } else {
+        metaBox.style.display = 'none';
+      }
+    });
+
     const INITIAL_DATA = [
-      { order_id: "ORD-1001", order_date: "2026-10-25 10:15", store_name: "中日新聞 栄専売店", product_name: "パナソニック 4K液晶テレビ 55型", price: 148000 },
-      { order_id: "ORD-1002", order_date: "2026-10-26 14:30", store_name: "中日新聞 名駅専売店", product_name: "ダイソン コードレス掃除機 V12", price: 68000 }
+      { order_id: "ORD-1001", order_date: "2026-10-25 10:15", store_id: "1001", branch: "名古屋支社", store_name: "中日新聞 栄専売店", product_name: "パナソニック 4K液晶テレビ 55型", price: 148000 },
+      { order_id: "ORD-1002", order_date: "2026-10-26 14:30", store_id: "1002", branch: "名古屋支社", store_name: "中日新聞 名駅専売店", product_name: "ダイソン コードレス掃除機 V12", price: 68000 }
     ];
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders");
+      const data = localStorage.getItem("demo_orders_v2");
       return data ? JSON.parse(data) : INITIAL_DATA;
     }
 
@@ -93,6 +143,7 @@
         <tr>
           <td><span class="badge">${o.order_id}</span></td>
           <td>${o.order_date.slice(5, 16)}</td>
+          <td>${o.store_id || "-"} <br><span style="font-size:10px; color:#666;">${o.branch || ""}</span></td>
           <td>${o.store_name}</td>
           <td>${o.product_name}</td>
           <td>¥${Number(o.price).toLocaleString()}</td>
@@ -102,18 +153,25 @@
 
     document.getElementById("orderForm").addEventListener("submit", (e) => {
       e.preventDefault();
+      const selectedStoreId = document.getElementById("store_select").value;
+      const storeInfo = STORE_DATA.find(s => s.id === selectedStoreId);
+      if (!storeInfo) return;
+
       const orders = getOrders();
       const newOrder = {
         order_id: "ORD-" + Math.floor(1000 + Math.random() * 9000),
         order_date: new Date().toISOString().replace('T', ' ').slice(0, 19),
-        store_name: document.getElementById("store_name").value,
+        store_id: storeInfo.id,
+        branch: storeInfo.branch,
+        store_name: storeInfo.name,
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       };
       orders.unshift(newOrder);
-      localStorage.setItem("demo_orders", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v2", JSON.stringify(orders));
       renderTable();
-      e.target.reset();
+      document.getElementById("product_name").value = "";
+      document.getElementById("price").value = "";
     });
 
     async function exportData(url) {
@@ -132,10 +190,11 @@
     }
 
     function resetDemo() {
-      localStorage.setItem("demo_orders", JSON.stringify(INITIAL_DATA));
+      localStorage.setItem("demo_orders_v2", JSON.stringify(INITIAL_DATA));
       renderTable();
     }
 
+    loadStores();
     renderTable();
   </script>
 </body>

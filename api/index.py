@@ -1,5 +1,6 @@
 import io
 import os
+import json
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI
@@ -16,20 +17,32 @@ app = FastAPI()
 # 日本語フォント登録（標準の平成明朝）
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
-# ルート（/）にアクセスされたら index.html の中身をブラウザに返す
+# トップページ配信
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
     html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
     if not os.path.exists(html_path):
-        # 万一ルート直下に見当たらない場合のフォールバック
         html_path = "index.html"
     with open(html_path, "r", encoding="utf-8") as f:
         return f.read()
 
+# 販売店リストAPI（stores.json を返す）
+@app.get("/api/stores")
+async def get_stores():
+    json_path = os.path.join(os.path.dirname(__file__), "..", "stores.json")
+    if not os.path.exists(json_path):
+        json_path = "stores.json"
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
 class OrderItem(BaseModel):
     order_id: str
     order_date: str
+    store_id: str = ""
     store_name: str
+    branch: str = ""
     product_name: str
     price: int
 
@@ -42,11 +55,13 @@ async def export_excel(payload: ExportPayload):
     data = [item.dict() for item in payload.orders]
     df = pd.DataFrame(data)
     if df.empty:
-        df = pd.DataFrame(columns=["order_id", "order_date", "store_name", "product_name", "price"])
+        df = pd.DataFrame(columns=["order_id", "order_date", "store_id", "branch", "store_name", "product_name", "price"])
     
     df.rename(columns={
         "order_id": "発注番号",
         "order_date": "発注日時",
+        "store_id": "販売店ID",
+        "branch": "管轄支社",
         "store_name": "販売店名",
         "product_name": "商品名・型番",
         "price": "金額(円)"
@@ -87,12 +102,13 @@ async def export_pdf(payload: ExportPayload):
     p.drawString(480, 750, "金額（税込）")
     p.line(50, 740, 550, 740)
     
-    # 注文明細
+    # 明細
     y = 720
     total = 0
     for item in payload.orders:
         p.drawString(50, y, item.order_id)
-        p.drawString(130, y, item.store_name[:12])
+        display_store = f"[{item.store_id}] {item.store_name}" if item.store_id else item.store_name
+        p.drawString(130, y, display_store[:12])
         p.drawString(280, y, item.product_name[:16])
         p.drawString(480, y, f"¥{item.price:,}")
         total += item.price
