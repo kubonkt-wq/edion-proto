@@ -39,7 +39,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">全パターンのファイル名を総当たり検索中...</div>
+      <div id="status_info" class="status-badge status-info">データをプログラム内部から読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -89,6 +89,16 @@
   </div>
 
   <script>
+// =========================================================
+// ▼▼▼ ここにCSVファイルの中身をそのまま貼り付けてください ▼▼▼
+// =========================================================
+const RAW_CSV_DATA = `県,地区,支部,班,店舗名,コード
+愛知県,テスト地区,テスト支部,テスト班,ダミー販売店,0000`;
+// =========================================================
+// ▲▲▲ ここまで ▲▲▲
+// =========================================================
+
+
     let ALL_STORES = [];
     let SELECTED_STORE = null;
 
@@ -179,70 +189,36 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // 全パターンのファイル名を総当たりで探す究極の読み込み処理
-    async function loadStores() {
-      const targets = [
-        '/stores_data.txt.csv',
-        '/stores_data.csv',
-        '/stores_data.txt',
-        '/stores.csv',
-        '/SHOPS.CSV',
-        '/shops.csv',
-        '/stores_data'
-      ];
-
-      let loaded = false;
-      let logs = [];
-
-      for (let url of targets) {
-        try {
-          const res = await fetch(url + '?t=' + new Date().getTime());
-          if (res.ok) {
-            const buffer = await res.arrayBuffer();
-            let text = new TextDecoder('utf-8').decode(buffer);
-            if (text.includes('')) {
-               text = new TextDecoder('shift_jis').decode(buffer);
-            }
-            
-            const lines = text.trim().split(/\r?\n/);
-            if (lines.length > 1) {
-               ALL_STORES = [];
-               for (let i = 1; i < lines.length; i++) {
-                 const cols = lines[i].split(',');
-                 if (cols.length >= 6) {
-                   ALL_STORES.push({
-                     _uid: "store_" + i,
-                     pref: cols[0].trim(),
-                     district: cols[1].trim(),
-                     branch: cols[2].trim(),
-                     group_name: cols[3].trim(),
-                     name: cols[4].trim(),
-                     id: cols[5].trim()
-                   });
-                 }
-               }
-               statusInfo.className = "status-badge status-success";
-               statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを自動読み込み完了しました！ (発見したファイル: ${url})`;
-               initSelects();
-               loaded = true;
-               break;
-            }
-          } else {
-            logs.push(`${url}(404)`);
+    // 通信を一切行わず、埋め込んだテキストデータから直接読み込む
+    function loadStores() {
+      try {
+        const lines = RAW_CSV_DATA.trim().split(/\r?\n/);
+        ALL_STORES = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',');
+          if (cols.length >= 6) {
+            ALL_STORES.push({
+              _uid: "store_" + i,
+              pref: cols[0].trim(),
+              district: cols[1].trim(),
+              branch: cols[2].trim(),
+              group_name: cols[3].trim(),
+              name: cols[4].trim(),
+              id: cols[5].trim()
+            });
           }
-        } catch (e) {
-          logs.push(`${url}(エラー)`);
         }
-      }
-
-      if (!loaded) {
+        statusInfo.className = "status-badge status-success";
+        statusInfo.textContent = `✔ ${ALL_STORES.length} 件の店舗データをプログラム内部から瞬時に読み込みました！`;
+        initSelects();
+      } catch(e) {
         statusInfo.className = "status-badge status-error";
-        statusInfo.innerHTML = `⚠ 読み込み失敗。探したファイル一覧: <br><span style="font-size:11px;">${logs.join(' | ')}</span>`;
+        statusInfo.textContent = `⚠ 読み込みエラー: ${e.message}`;
       }
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v26");
+      const data = localStorage.getItem("demo_orders_v27");
       return data ? JSON.parse(data) : [];
     }
 
@@ -274,7 +250,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v26", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v27", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -321,7 +297,7 @@
       win.document.close();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v26", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v27", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
