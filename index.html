@@ -38,14 +38,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">サーバーと通信中...</div>
-      
-      <!-- サーバー失敗時用の無敵フォールバックUI -->
-      <div id="fallback_ui" style="display: none; background: #fff3cd; padding: 12px; border: 1px solid #ffe69c; border-radius: 4px; margin-bottom: 12px; font-size: 13px; color: #664d03;">
-        ⚠ サーバー通信に失敗しました。<br>
-        <b>デモを続けるには、パソコン内にある SHOPS.CSV を直接選択してください。</b><br>
-        <input type="file" id="csv_file" accept=".csv" style="margin-top: 8px;">
-      </div>
+      <div id="status_info" class="status-badge status-info">サーバーから店舗データを読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -105,7 +98,6 @@
     const elStore = document.getElementById('sel_store');
     const metaBox = document.getElementById('store_meta');
     const statusInfo = document.getElementById('status_info');
-    const fallbackUi = document.getElementById('fallback_ui');
 
     function initSelects() {
       const prefs = [...new Set(ALL_STORES.map(s => s.pref).filter(Boolean))];
@@ -186,76 +178,42 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // API取得、失敗時は手動アップロードUIを展開
+    // API経由で自動取得
     async function loadStores() {
       try {
         const res = await fetch('/api/stores?t=' + new Date().getTime());
         if (res.ok) {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 0) {
-            if (raw[0].id === "ERROR") throw new Error("API File Error");
+            if (raw[0].id === "ERROR") {
+              throw new Error(raw[0].name);
+            }
             
             ALL_STORES = raw.map((item, idx) => ({
               _uid: "store_" + idx,
-              pref: String(item.pref || item["県"] || "愛知県").trim(),
-              district: String(item.district || item["地区"] || "一般地区").trim(),
-              branch: String(item.branch || item["支部"] || "一般支部").trim(),
-              group_name: String(item.group_name || item["班"] || "一般班").trim(),
-              name: String(item.name || item["店舗名"] || `販売店${idx}`).trim(),
+              pref: String(item.pref || item["県"] || "").trim(),
+              district: String(item.district || item["地区"] || "").trim(),
+              branch: String(item.branch || item["支部"] || "").trim(),
+              group_name: String(item.group_name || item["班"] || "").trim(),
+              name: String(item.name || item["店舗名"] || "").trim(),
               id: String(item.id || item["コード"] || "").trim()
             }));
             
             statusInfo.className = "status-badge status-success";
-            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データをサーバーから読み込みました`;
+            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを自動で読み込みました！`;
             initSelects();
             return;
           }
         }
       } catch (e) {
-         console.warn("API load failed, showing fallback UI");
+         console.error(e);
+         statusInfo.className = "status-badge status-error";
+         statusInfo.innerHTML = `⚠ 自動読み込みに失敗しました (${e.message})`;
       }
-      
-      // 失敗した場合は手動フォールバックUIを表示
-      statusInfo.style.display = 'none';
-      fallbackUi.style.display = 'block';
     }
 
-    // 手動ファイルアップロード機能
-    document.getElementById('csv_file').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const text = evt.target.result;
-        const lines = text.trim().split(/\r?\n/);
-        if (lines.length > 1) {
-          ALL_STORES = [];
-          for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',');
-            if (cols.length >= 6) {
-              ALL_STORES.push({
-                _uid: "store_" + i,
-                pref: String(cols[0]).trim(),
-                district: String(cols[1]).trim(),
-                branch: String(cols[2]).trim(),
-                group_name: String(cols[3]).trim(),
-                name: String(cols[4]).trim(),
-                id: String(cols[5]).trim()
-              });
-            }
-          }
-          fallbackUi.style.display = 'none';
-          statusInfo.style.display = 'block';
-          statusInfo.className = "status-badge status-success";
-          statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを手動ファイルから読み込みました！`;
-          initSelects();
-        }
-      };
-      reader.readAsText(file); // UTF-8想定で読み込み
-    });
-
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v20");
+      const data = localStorage.getItem("demo_orders_v21");
       return data ? JSON.parse(data) : [];
     }
 
@@ -287,7 +245,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v20", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v21", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -300,7 +258,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v20", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v21", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();

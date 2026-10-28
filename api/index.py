@@ -17,36 +17,30 @@ app = FastAPI()
 pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
 
 def get_stores_data():
-    base_dir = os.path.dirname(__file__)
-    root_dir = os.path.join(base_dir, "..")
-    
-    # 小文字の stores.csv を最優先で探す
+    # apiフォルダ内、または1つ上のフォルダにある stores.csv を探す
     csv_paths = [
-        os.path.join(root_dir, "stores.csv"),
-        os.path.join(root_dir, "STORES.CSV"),
-        os.path.join(root_dir, "SHOPS.CSV"),
-        os.path.join(root_dir, "shops.csv")
+        os.path.join(os.path.dirname(__file__), "stores.csv"),
+        os.path.join(os.path.dirname(__file__), "..", "stores.csv")
     ]
     
     for p in csv_paths:
         if os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    return list(reader)
+                    return list(csv.DictReader(f))
             except UnicodeDecodeError:
                 with open(p, "r", encoding="shift_jis") as f:
-                    reader = csv.DictReader(f)
-                    return list(reader)
-    return []
+                    return list(csv.DictReader(f))
+    
+    return [{"id": "ERROR", "name": "サーバー上に stores.csv が見つかりません"}]
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
-    html_path = "index.html"
-    if not os.path.exists(html_path):
-        html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        return f.read()
+    html_path = os.path.join(os.path.dirname(__file__), "..", "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "index.htmlが見つかりません"
 
 @app.get("/api/stores")
 async def get_stores():
