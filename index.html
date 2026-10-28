@@ -1448,6 +1448,7 @@ pref	district	branch	group_name	name	id
       XLSX.writeFile(wb, filename);
     }
 
+    // PDF出力（代理店名の枠を追加）
     function exportPDF() {
       const orders = getOrders();
       if(orders.length === 0) { alert("出力するデータがありません"); return; }
@@ -1469,6 +1470,9 @@ pref	district	branch	group_name	name	id
       html += `
           </table>
           <h3 style="text-align: right; margin-top: 20px;">合計発注金額: ¥${total.toLocaleString()}</h3>
+          <div style="border: 1px solid #333; padding: 20px; margin-top: 40px; font-size: 16px;">
+            代理店名 （株）中日新聞社
+          </div>
         </div>
       `;
       const win = window.open('', '_blank');
