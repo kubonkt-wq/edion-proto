@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>【デモ版】中日新聞社 × EDION 代理店発注プラットフォーム</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; margin: 0; padding: 24px; color: #333; }
     .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
@@ -38,7 +39,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">サーバーから店舗データを全自動検索中...</div>
+      <div id="status_info" class="status-badge status-info">データを自動読み込み中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -74,8 +75,8 @@
     <div class="card">
       <h2>2. 新聞社 注文集約・連携センター</h2>
       <div class="toolbar">
-        <button class="btn-secondary" onclick="exportData('/api/export-excel')">月次請求用 Excel 出力</button>
-        <button class="btn-pdf" onclick="exportData('/api/export-pdf')">EDION宛て 発注書PDF 出力</button>
+        <button class="btn-secondary" onclick="exportExcel()">月次請求用 Excel 出力</button>
+        <button class="btn-pdf" onclick="exportPDF()">EDION宛て 発注書PDF 出力</button>
         <button style="background: #6c757d; width: auto;" onclick="resetDemo()">初期化</button>
       </div>
       <table id="orderTable">
@@ -178,83 +179,49 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // API・直接CSV・フォルダ内CSVの全てを自動で試す最強ローダー
+    // サーバーを通さず「stores_data.txt」から直接データを読み込む
     async function loadStores() {
-      const targets = [
-        { url: '/api/stores', isApi: true },
-        { url: '/stores.csv', isApi: false },
-        { url: '/api/stores.csv', isApi: false },
-        { url: '/SHOPS.CSV', isApi: false }
-      ];
-
-      let errorLogs = [];
-
-      for (let target of targets) {
-        try {
-          const res = await fetch(target.url + '?t=' + new Date().getTime());
+      try {
+        const res = await fetch('/stores_data.txt?t=' + new Date().getTime());
+        if (res.ok) {
+          const buffer = await res.arrayBuffer();
+          let text = new TextDecoder('utf-8').decode(buffer);
+          // 文字化け（Shift-JIS）対策
+          if (text.includes('')) {
+             text = new TextDecoder('shift_jis').decode(buffer);
+          }
           
-          if (!res.ok) {
-            errorLogs.push(`${target.url} -> HTTP ${res.status}`);
-            continue; // 失敗したら次のURLを試す
+          const lines = text.trim().split(/\r?\n/);
+          ALL_STORES = [];
+          for (let i = 1; i < lines.length; i++) {
+             const cols = lines[i].split(',');
+             if (cols.length >= 6) {
+               ALL_STORES.push({
+                 _uid: "store_" + i,
+                 pref: cols[0].trim(),
+                 district: cols[1].trim(),
+                 branch: cols[2].trim(),
+                 group_name: cols[3].trim(),
+                 name: cols[4].trim(),
+                 id: cols[5].trim()
+               });
+             }
           }
-
-          if (target.isApi) {
-            const raw = await res.json();
-            if (raw.length > 0 && raw[0].id === "ERROR") {
-              errorLogs.push(`${target.url} -> ${raw[0].name}`);
-              continue;
-            }
-            ALL_STORES = raw.map((item, idx) => ({
-              _uid: "store_" + idx,
-              pref: String(item.pref || item["県"] || "").trim(),
-              district: String(item.district || item["地区"] || "").trim(),
-              branch: String(item.branch || item["支部"] || "").trim(),
-              group_name: String(item.group_name || item["班"] || "").trim(),
-              name: String(item.name || item["店舗名"] || `販売店${idx}`).trim(),
-              id: String(item.id || item["コード"] || "").trim()
-            }));
-          } else {
-            const text = await res.text();
-            const lines = text.trim().split(/\r?\n/);
-            if (lines.length < 2) {
-              errorLogs.push(`${target.url} -> データが空です`);
-              continue;
-            }
-            ALL_STORES = [];
-            for (let i = 1; i < lines.length; i++) {
-              const cols = lines[i].split(',');
-              if (cols.length >= 6) {
-                ALL_STORES.push({
-                  _uid: "store_" + i,
-                  pref: cols[0].trim(),
-                  district: cols[1].trim(),
-                  branch: cols[2].trim(),
-                  group_name: cols[3].trim(),
-                  name: cols[4].trim(),
-                  id: cols[5].trim()
-                });
-              }
-            }
-          }
-
-          if (ALL_STORES.length > 0) {
-            statusInfo.className = "status-badge status-success";
-            statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを自動で読み込みました (取得元: ${target.url})`;
-            initSelects();
-            return; // 成功したらここで処理終了
-          }
-        } catch (e) {
-          errorLogs.push(`${target.url} -> 通信エラー`);
+          statusInfo.className = "status-badge status-success";
+          statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを stores_data.txt から自動読み込み完了しました！`;
+          initSelects();
+        } else {
+          statusInfo.className = "status-badge status-error";
+          statusInfo.textContent = `⚠ stores_data.txt が見つかりません。名前を変更してプッシュしましたか？`;
         }
+      } catch (e) {
+        statusInfo.className = "status-badge status-error";
+        statusInfo.textContent = `⚠ 読み込みエラー: ${e.message}`;
       }
-
-      // 全て失敗した場合のみエラー表示
-      statusInfo.className = "status-badge status-error";
-      statusInfo.innerHTML = `⚠ 自動読み込みに全て失敗しました。<br><span style="font-size:11px;">詳細: ${errorLogs.join(' | ')}</span>`;
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v22");
+      const data = localStorage.getItem("demo_orders_v25");
       return data ? JSON.parse(data) : [];
     }
 
@@ -286,20 +253,56 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v22", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v25", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
 
-    async function exportData(url) {
+    // JavaScriptだけで完全にExcelを出力する処理
+    function exportExcel() {
       const orders = getOrders();
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orders }) });
-      const blob = await res.blob();
-      const a = document.createElement("a"); a.href = window.URL.createObjectURL(blob);
-      a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
+      if(orders.length === 0) { alert("出力するデータがありません"); return; }
+      const ws_data = [["発注番号", "発注日時", "販売店ID", "管轄支社", "販売店名", "商品名・型番", "金額(円)"]];
+      orders.forEach(o => {
+        ws_data.push([o.order_id, o.order_date, o.store_id, o.branch, o.store_name, o.product_name, o.price]);
+      });
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "月次請求対象一覧");
+      const filename = `chunichi_billing_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`;
+      XLSX.writeFile(wb, filename);
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v22", JSON.stringify([])); renderTable(); }
+    // JavaScriptだけでPDF用印刷プレビューを生成する処理
+    function exportPDF() {
+      const orders = getOrders();
+      if(orders.length === 0) { alert("出力するデータがありません"); return; }
+      let html = `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>発注書（EDION 御中）</h2>
+          <p>発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+          <p>発注元: 株式会社中日新聞社</p>
+          <table border="1" style="border-collapse:collapse; width:100%; font-size: 14px; text-align: left;">
+            <tr style="background:#f0f0f0;">
+              <th style="padding:8px;">発注番号</th><th style="padding:8px;">販売店（配送先）</th><th style="padding:8px;">発注商品名</th><th style="padding:8px;">金額（税込）</th>
+            </tr>
+      `;
+      let total = 0;
+      orders.forEach(o => {
+         html += `<tr><td style="padding:8px;">${o.order_id}</td><td style="padding:8px;">[${o.store_id}] ${o.store_name}</td><td style="padding:8px;">${o.product_name}</td><td style="padding:8px;">¥${o.price.toLocaleString()}</td></tr>`;
+         total += Number(o.price);
+      });
+      html += `
+          </table>
+          <h3 style="text-align: right; margin-top: 20px;">合計発注金額: ¥${total.toLocaleString()}</h3>
+        </div>
+      `;
+      const win = window.open('', '_blank');
+      win.document.write('<html><head><title>発注書PDFプレビュー</title></head><body>' + html + '<script>setTimeout(() => window.print(), 500);<\/script></body></html>');
+      win.document.close();
+    }
+
+    function resetDemo() { localStorage.setItem("demo_orders_v25", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
