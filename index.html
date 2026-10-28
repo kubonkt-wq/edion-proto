@@ -1398,7 +1398,6 @@ pref	district	branch	group_name	name	id
       }
     }
 
-    // データ保存キーを変更（ステータス管理追加のため）
     const STORAGE_KEY = "demo_orders_v30";
 
     function getOrders() {
@@ -1406,7 +1405,6 @@ pref	district	branch	group_name	name	id
       return data ? JSON.parse(data) : [];
     }
 
-    // フィルターのプルダウンを自動生成する処理
     function updateFilters(orders) {
       const filterMonth = document.getElementById("filter_month");
       const filterStore = document.getElementById("filter_store");
@@ -1414,12 +1412,10 @@ pref	district	branch	group_name	name	id
       const currentMonth = filterMonth.value;
       const currentStore = filterStore.value;
 
-      // 年月の抽出 (YYYY-MM)
       const months = [...new Set(orders.map(o => o.order_date.slice(0, 7)))].sort().reverse();
       filterMonth.innerHTML = '<option value="">全期間（すべての年月）</option>' + 
         months.map(m => `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${m.replace('-', '年')}月度</option>`).join("");
 
-      // 店舗の抽出
       const stores = [...new Set(orders.map(o => o.store_id))].sort();
       filterStore.innerHTML = '<option value="">全販売店</option>' + 
         stores.map(s => {
@@ -1435,7 +1431,6 @@ pref	district	branch	group_name	name	id
       const fMonth = document.getElementById("filter_month").value;
       const fStore = document.getElementById("filter_store").value;
 
-      // 絞り込み処理
       const filteredOrders = orders.filter(o => {
         const matchMonth = fMonth === "" || o.order_date.startsWith(fMonth);
         const matchStore = fStore === "" || o.store_id === fStore;
@@ -1468,14 +1463,13 @@ pref	district	branch	group_name	name	id
         store_name: SELECTED_STORE.name,
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10),
-        status: "未請求" // 新規追加時は未請求
+        status: "未請求"
       });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
 
-    // 請求済みに更新する処理
     function markAsBilled(targetOrderIds) {
       setTimeout(() => {
         if(confirm("出力が完了しました。\n二重請求を防止するため、出力したデータを「請求済」としてマークしますか？")) {
@@ -1490,7 +1484,6 @@ pref	district	branch	group_name	name	id
       }, 1000);
     }
 
-    // 現在の絞り込み条件に合う「未請求」データだけを取得
     function getTargetOrdersForExport() {
       const orders = getOrders();
       const fMonth = document.getElementById("filter_month").value;
