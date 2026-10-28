@@ -38,7 +38,7 @@
     <div class="card">
       <h2>1. 販売店 注文受付入力</h2>
       
-      <div id="status_info" class="status-badge status-info">サーバーから店舗データを読み込み中...</div>
+      <div id="status_info" class="status-badge status-info">サーバーから店舗データを全自動検索中...</div>
 
       <form id="orderForm">
         <label>① 県を選択</label>
@@ -178,42 +178,83 @@
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // API経由で自動取得
+    // API・直接CSV・フォルダ内CSVの全てを自動で試す最強ローダー
     async function loadStores() {
-      try {
-        const res = await fetch('/api/stores?t=' + new Date().getTime());
-        if (res.ok) {
-          const raw = await res.json();
-          if (Array.isArray(raw) && raw.length > 0) {
-            if (raw[0].id === "ERROR") {
-              throw new Error(raw[0].name);
+      const targets = [
+        { url: '/api/stores', isApi: true },
+        { url: '/stores.csv', isApi: false },
+        { url: '/api/stores.csv', isApi: false },
+        { url: '/SHOPS.CSV', isApi: false }
+      ];
+
+      let errorLogs = [];
+
+      for (let target of targets) {
+        try {
+          const res = await fetch(target.url + '?t=' + new Date().getTime());
+          
+          if (!res.ok) {
+            errorLogs.push(`${target.url} -> HTTP ${res.status}`);
+            continue; // 失敗したら次のURLを試す
+          }
+
+          if (target.isApi) {
+            const raw = await res.json();
+            if (raw.length > 0 && raw[0].id === "ERROR") {
+              errorLogs.push(`${target.url} -> ${raw[0].name}`);
+              continue;
             }
-            
             ALL_STORES = raw.map((item, idx) => ({
               _uid: "store_" + idx,
               pref: String(item.pref || item["県"] || "").trim(),
               district: String(item.district || item["地区"] || "").trim(),
               branch: String(item.branch || item["支部"] || "").trim(),
               group_name: String(item.group_name || item["班"] || "").trim(),
-              name: String(item.name || item["店舗名"] || "").trim(),
+              name: String(item.name || item["店舗名"] || `販売店${idx}`).trim(),
               id: String(item.id || item["コード"] || "").trim()
             }));
-            
-            statusInfo.className = "status-badge status-success";
-            statusInfo.textContent = `✔ ${ALL_STORES.length} 件の販売店データを自動で読み込みました！`;
-            initSelects();
-            return;
+          } else {
+            const text = await res.text();
+            const lines = text.trim().split(/\r?\n/);
+            if (lines.length < 2) {
+              errorLogs.push(`${target.url} -> データが空です`);
+              continue;
+            }
+            ALL_STORES = [];
+            for (let i = 1; i < lines.length; i++) {
+              const cols = lines[i].split(',');
+              if (cols.length >= 6) {
+                ALL_STORES.push({
+                  _uid: "store_" + i,
+                  pref: cols[0].trim(),
+                  district: cols[1].trim(),
+                  branch: cols[2].trim(),
+                  group_name: cols[3].trim(),
+                  name: cols[4].trim(),
+                  id: cols[5].trim()
+                });
+              }
+            }
           }
+
+          if (ALL_STORES.length > 0) {
+            statusInfo.className = "status-badge status-success";
+            statusInfo.textContent = `✔ ${ALL_STORES.length} 件のデータを自動で読み込みました (取得元: ${target.url})`;
+            initSelects();
+            return; // 成功したらここで処理終了
+          }
+        } catch (e) {
+          errorLogs.push(`${target.url} -> 通信エラー`);
         }
-      } catch (e) {
-         console.error(e);
-         statusInfo.className = "status-badge status-error";
-         statusInfo.innerHTML = `⚠ 自動読み込みに失敗しました (${e.message})`;
       }
+
+      // 全て失敗した場合のみエラー表示
+      statusInfo.className = "status-badge status-error";
+      statusInfo.innerHTML = `⚠ 自動読み込みに全て失敗しました。<br><span style="font-size:11px;">詳細: ${errorLogs.join(' | ')}</span>`;
     }
 
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v21");
+      const data = localStorage.getItem("demo_orders_v22");
       return data ? JSON.parse(data) : [];
     }
 
@@ -245,7 +286,7 @@
         product_name: document.getElementById("product_name").value,
         price: parseInt(document.getElementById("price").value, 10)
       });
-      localStorage.setItem("demo_orders_v21", JSON.stringify(orders));
+      localStorage.setItem("demo_orders_v22", JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
@@ -258,7 +299,7 @@
       a.download = url.includes("excel") ? "monthly_billing.xlsx" : "edion_order.pdf"; a.click();
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v21", JSON.stringify([])); renderTable(); }
+    function resetDemo() { localStorage.setItem("demo_orders_v22", JSON.stringify([])); renderTable(); }
 
     loadStores();
     renderTable();
