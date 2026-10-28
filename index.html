@@ -28,6 +28,10 @@
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background: #f0f4f8; }
     .badge { display: inline-block; padding: 2px 6px; font-size: 10px; border-radius: 3px; background: #e2e3e5; color: #383d41; }
+    .badge-unbilled { background: #cce5ff; color: #004085; font-weight: bold; }
+    .badge-billed { background: #d4edda; color: #155724; }
+    .filter-box { background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 4px; margin-bottom: 12px; display: flex; gap: 12px; align-items: center; font-size: 12px; }
+    .filter-box select { margin-top: 0; width: auto; min-width: 150px; }
   </style>
 </head>
 <body>
@@ -74,14 +78,22 @@
 
     <div class="card">
       <h2>2. 新聞社 注文集約・連携センター</h2>
+      
+      <!-- 絞り込みフィルター追加 -->
+      <div class="filter-box">
+        <strong>🔍 データ絞り込み:</strong>
+        <select id="filter_month" onchange="renderTable()"><option value="">全期間（すべての年月）</option></select>
+        <select id="filter_store" onchange="renderTable()"><option value="">全販売店</option></select>
+      </div>
+
       <div class="toolbar">
-        <button class="btn-secondary" onclick="exportExcel()">月次請求用 Excel 出力</button>
-        <button class="btn-pdf" onclick="exportPDF()">EDION宛て 発注書PDF 出力</button>
-        <button style="background: #6c757d; width: auto;" onclick="resetDemo()">初期化</button>
+        <button class="btn-secondary" onclick="exportExcel()">未請求分をExcel出力 (月次締め)</button>
+        <button class="btn-pdf" onclick="exportPDF()">未請求分をPDF出力 (EDION宛て)</button>
+        <button style="background: #6c757d; width: auto;" onclick="resetDemo()">データ初期化</button>
       </div>
       <table id="orderTable">
         <thead>
-          <tr><th>発注番号</th><th>日時</th><th>店コード / 支部</th><th>販売店名</th><th>商品名</th><th>金額</th></tr>
+          <tr><th>発注番号</th><th>日時</th><th>店コード / 支部</th><th>販売店名</th><th>商品名</th><th>金額</th><th>請求状態</th></tr>
         </thead>
         <tbody id="tableBody"></tbody>
       </table>
@@ -1260,7 +1272,6 @@ pref	district	branch	group_name	name	id
 `;
 // =========================================================
 
-
     let ALL_STORES = [];
     let SELECTED_STORE = null;
 
@@ -1351,7 +1362,6 @@ pref	district	branch	group_name	name	id
     }
     function clearMeta() { SELECTED_STORE = null; metaBox.style.display = 'none'; }
 
-    // 通信を一切行わず、埋め込んだテキストデータから直接読み込む
     function loadStores() {
       try {
         const lines = RAW_CSV_DATA.trim().split(/\r?\n/);
@@ -1359,17 +1369,10 @@ pref	district	branch	group_name	name	id
         let count = 1;
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
-          
-          // 説明文や空行は自動でスキップ
           if (!line || line.includes('▼▼▼') || line.includes('▲▲▲')) continue;
-          
-          // カンマ または Excel特有の空白(タブ) の両方に対応して分割！
           const cols = line.split(/[\t,]/);
-          
           if (cols.length >= 6) {
-            // 見出し行も自動でスキップ
             if (cols[0] === 'pref' || cols[0] === '県' || cols[5] === 'id' || cols[5] === 'コード') continue;
-            
             ALL_STORES.push({
               _uid: "store_" + count++,
               pref: cols[0].trim(),
@@ -1381,7 +1384,6 @@ pref	district	branch	group_name	name	id
             });
           }
         }
-        
         if (ALL_STORES.length > 0) {
           statusInfo.className = "status-badge status-success";
           statusInfo.textContent = `✔ ${ALL_STORES.length} 件の店舗データを瞬時に読み込み完了しました！`;
@@ -1396,15 +1398,52 @@ pref	district	branch	group_name	name	id
       }
     }
 
+    // データ保存キーを変更（ステータス管理追加のため）
+    const STORAGE_KEY = "demo_orders_v30";
+
     function getOrders() {
-      const data = localStorage.getItem("demo_orders_v28");
+      const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
+    }
+
+    // フィルターのプルダウンを自動生成する処理
+    function updateFilters(orders) {
+      const filterMonth = document.getElementById("filter_month");
+      const filterStore = document.getElementById("filter_store");
+      
+      const currentMonth = filterMonth.value;
+      const currentStore = filterStore.value;
+
+      // 年月の抽出 (YYYY-MM)
+      const months = [...new Set(orders.map(o => o.order_date.slice(0, 7)))].sort().reverse();
+      filterMonth.innerHTML = '<option value="">全期間（すべての年月）</option>' + 
+        months.map(m => `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${m.replace('-', '年')}月度</option>`).join("");
+
+      // 店舗の抽出
+      const stores = [...new Set(orders.map(o => o.store_id))].sort();
+      filterStore.innerHTML = '<option value="">全販売店</option>' + 
+        stores.map(s => {
+          const sName = orders.find(o => o.store_id === s).store_name;
+          return `<option value="${s}" ${s === currentStore ? 'selected' : ''}>[${s}] ${sName}</option>`;
+        }).join("");
     }
 
     function renderTable() {
       const orders = getOrders();
+      updateFilters(orders);
+
+      const fMonth = document.getElementById("filter_month").value;
+      const fStore = document.getElementById("filter_store").value;
+
+      // 絞り込み処理
+      const filteredOrders = orders.filter(o => {
+        const matchMonth = fMonth === "" || o.order_date.startsWith(fMonth);
+        const matchStore = fStore === "" || o.store_id === fStore;
+        return matchMonth && matchStore;
+      });
+
       const tbody = document.getElementById("tableBody");
-      tbody.innerHTML = orders.map(o => `
+      tbody.innerHTML = filteredOrders.map(o => `
         <tr>
           <td><span class="badge">${o.order_id}</span></td>
           <td>${o.order_date.slice(5, 16)}</td>
@@ -1412,6 +1451,7 @@ pref	district	branch	group_name	name	id
           <td>${o.store_name}</td>
           <td>${o.product_name}</td>
           <td>¥${Number(o.price).toLocaleString()}</td>
+          <td><span class="badge ${o.status === '未請求' ? 'badge-unbilled' : 'badge-billed'}">${o.status}</span></td>
         </tr>
       `).join("");
     }
@@ -1427,31 +1467,62 @@ pref	district	branch	group_name	name	id
         branch: SELECTED_STORE.branch,
         store_name: SELECTED_STORE.name,
         product_name: document.getElementById("product_name").value,
-        price: parseInt(document.getElementById("price").value, 10)
+        price: parseInt(document.getElementById("price").value, 10),
+        status: "未請求" // 新規追加時は未請求
       });
-      localStorage.setItem("demo_orders_v28", JSON.stringify(orders));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
       renderTable();
       document.getElementById("product_name").value = ""; document.getElementById("price").value = "";
     });
 
-    function exportExcel() {
+    // 請求済みに更新する処理
+    function markAsBilled(targetOrderIds) {
+      setTimeout(() => {
+        if(confirm("出力が完了しました。\n二重請求を防止するため、出力したデータを「請求済」としてマークしますか？")) {
+          let orders = getOrders();
+          orders = orders.map(o => {
+            if(targetOrderIds.includes(o.order_id)) { o.status = "請求済"; }
+            return o;
+          });
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+          renderTable();
+        }
+      }, 1000);
+    }
+
+    // 現在の絞り込み条件に合う「未請求」データだけを取得
+    function getTargetOrdersForExport() {
       const orders = getOrders();
-      if(orders.length === 0) { alert("出力するデータがありません"); return; }
-      const ws_data = [["発注番号", "発注日時", "販売店ID", "管轄支社", "販売店名", "商品名・型番", "金額(円)"]];
-      orders.forEach(o => {
-        ws_data.push([o.order_id, o.order_date, o.store_id, o.branch, o.store_name, o.product_name, o.price]);
+      const fMonth = document.getElementById("filter_month").value;
+      const fStore = document.getElementById("filter_store").value;
+      return orders.filter(o => {
+        const matchMonth = fMonth === "" || o.order_date.startsWith(fMonth);
+        const matchStore = fStore === "" || o.store_id === fStore;
+        return matchMonth && matchStore && o.status === "未請求";
+      });
+    }
+
+    function exportExcel() {
+      const targetOrders = getTargetOrdersForExport();
+      if(targetOrders.length === 0) { alert("現在表示されている条件の中に、出力可能な「未請求」データがありません。"); return; }
+      
+      const ws_data = [["発注番号", "発注日時", "販売店ID", "管轄支社", "販売店名", "商品名・型番", "金額(円)", "請求状態"]];
+      targetOrders.forEach(o => {
+        ws_data.push([o.order_id, o.order_date, o.store_id, o.branch, o.store_name, o.product_name, o.price, "請求確定"]);
       });
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       XLSX.utils.book_append_sheet(wb, ws, "月次請求対象一覧");
       const filename = `chunichi_billing_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`;
       XLSX.writeFile(wb, filename);
+
+      markAsBilled(targetOrders.map(o => o.order_id));
     }
 
-    // PDF出力（代理店名の枠を追加）
     function exportPDF() {
-      const orders = getOrders();
-      if(orders.length === 0) { alert("出力するデータがありません"); return; }
+      const targetOrders = getTargetOrdersForExport();
+      if(targetOrders.length === 0) { alert("現在表示されている条件の中に、出力可能な「未請求」データがありません。"); return; }
+      
       let html = `
         <div style="font-family: sans-serif; padding: 20px;">
           <h2>発注書（EDION 御中）</h2>
@@ -1463,7 +1534,7 @@ pref	district	branch	group_name	name	id
             </tr>
       `;
       let total = 0;
-      orders.forEach(o => {
+      targetOrders.forEach(o => {
          html += `<tr><td style="padding:8px;">${o.order_id}</td><td style="padding:8px;">[${o.store_id}] ${o.store_name}</td><td style="padding:8px;">${o.product_name}</td><td style="padding:8px;">¥${o.price.toLocaleString()}</td></tr>`;
          total += Number(o.price);
       });
@@ -1478,9 +1549,16 @@ pref	district	branch	group_name	name	id
       const win = window.open('', '_blank');
       win.document.write('<html><head><title>発注書PDFプレビュー</title></head><body>' + html + '<script>setTimeout(() => window.print(), 500);<\/script></body></html>');
       win.document.close();
+
+      markAsBilled(targetOrders.map(o => o.order_id));
     }
 
-    function resetDemo() { localStorage.setItem("demo_orders_v28", JSON.stringify([])); renderTable(); }
+    function resetDemo() { 
+      if(confirm("デモ用の注文データをすべて削除し、初期状態に戻しますか？")) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([])); 
+        renderTable(); 
+      }
+    }
 
     loadStores();
     renderTable();
